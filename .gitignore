@@ -1,0 +1,16 @@
+.venv/
+jobs/
+# Lokalna podešavanja: piše ih ekran /settings, razlikuju se po mašini.
+subtitis.toml
+import/
+# Sirovi merni podaci (prepisi, words svih proba): sadržaj tuđih snimaka, deo
+# njih su izjave korisnika socijalnih usluga — isti razlog kao jobs/. Dnevnik
+# nalaza (merenja/dnevnik.md) i skripte (scripts/) idu u repozitorijum.
+merenja/*/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+# pokrivenost testovima (krug 15)
+.coverage
+htmlcov/

@@ -1,0 +1,9 @@
+{#- Odgovor na prelamanje iz trake editora (krug 13): samo delovi koji se
+    menjaju, svaki menja svoj element po id-ju. Uspeh nema poruku — vidi se
+    u samom prelomu; greška stoji crveno uz traku. -#}
+{% for r in rows %}{% include "_prev.html" %}
+{% endfor %}
+{% include "_downloads.html" %}
+<span id="build-status" class="build-err" role="status" hx-swap-oob="true">
+  {%- if error %}Prelamanje nije uspelo: {{ error }}{% endif -%}
+</span>

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Kako ovo radi — Subtitis{% endblock %}
+{% block content %}
+<div class="pjhead">
+  <h1>Kako ovo radi</h1>
+</div>
+<section class="panel guide-page">
+  <h2>Tok 1 — titl iz snimka</h2>
+  <ol>
+    <li>Otpremi fajl, izaberi jezik koji se u njemu govori.</li>
+    <li>Sačekaj prepoznavanje (~7 min po satu snimka). Pogledaj pokrivenost i praznine.</li>
+    <li>Otvori editor i ispravi prepis. Preslušaj obojene reči.</li>
+    <li>Preuzmi titl na izvornom jeziku — gotov je.</li>
+    <li>Ako treba prevod, klikni „Prevedi". Prevodi se tek sad, posle ispravki.</li>
+    <li>Prođi kroz prevod u editoru, preuzmi.</li>
+  </ol>
+</section>
+
+<section class="panel guide-page">
+  <p><strong>Snimak na izrazitom dijalektu</strong> — na stranici projekta, u
+  izveštaju, upiši u „Termini iz ovog snimka" reči i imena koja se u njemu
+  javljaju, pa ponovi prepoznavanje. Model ih tada mnogo bolje pogađa. Ostatak
+  se ispravlja u editoru; alat ne ispravlja dijalekat sam, jer dijalekat nije
+  greška.</p>
+  <p><strong>Profili</strong> — <code>tv</code> je klasičan titl u dva reda;
+  <code>web</code> je za vertikalni video: natpis preko sredine kadra, jedan red
+  od najviše 20 znakova u trenutku; <code>digital</code> je isti prelom kao
+  <code>web</code>, ali VELIKIM slovima i bez interpunkcije, za društvene mreže.</p>
+  <p><strong>Veličina slova</strong> (uz izbor pisma) menja samo izgled
+  preuzetog titla — VELIKA, normalna ili mala slova; prepis i prevod ostaju
+  kakvi su.</p>
+</section>
+
+<section class="panel guide-page">
+  <h2>Tok 2 — prevod gotovog titla</h2>
+  <ol>
+    <li>Otpremi SRT. Vremena u njemu se neće dirati.</li>
+    <li>Izaberi ciljni jezik. Profil ostavi na „original".</li>
+    <li>Prevod, pa pregled izveštaja o prekoračenjima.</li>
+    <li>Ako ih ima, „Skrati prekoračenja" — pa ručno pregledaj predloge.</li>
+    <li>Preuzmi.</li>
+  </ol>
+</section>
+
+<section class="panel guide-page">
+  <h2>Prečice u editoru</h2>
+  <ul>
+    <li><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd> — sledeći / prethodni red</li>
+    <li><kbd>Ctrl</kbd>+<kbd>Space</kbd> — pusti isečak tekućeg reda. Sama
+      <kbd>Space</kbd> radi isto <em>kad kursor nije u tekstu</em> — u tekstu ona
+      kuca razmak.</li>
+    <li><kbd>Alt</kbd>+<kbd>N</kbd> / <kbd>Alt</kbd>+<kbd>P</kbd> — sledeća /
+      prethodna rečenica sa izmišljenim ili nesigurnim rečima, ili neprevedena; kod
+      prevoda gotovog SRT-a — rečenica u cue-u preko profila</li>
+    <li><kbd>Ctrl</kbd>+<kbd>S</kbd> — snimi</li>
+    <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> — poništi izmenu (do 20 unazad)</li>
+    <li><kbd>Esc</kbd> — zatvori otvoreno objašnjenje</li>
+  </ul>
+</section>
+
+<section class="panel guide-page">
+  <h2>Šta alat namerno ne radi</h2>
+  <ul>
+    <li>prepoznavanje govornika;</li>
+    <li>automatski prevod snimka bez klika — prevod gotovog SRT-a kreće odmah,
+      jer je takav ulaz već ispravljen;</li>
+    <li>brisanje tvojih ispravki;</li>
+    <li>slanje bilo čega van ovog računara.</li>
+  </ul>
+</section>
+
+<section class="panel guide-page">
+  <h2>Česti problemi</h2>
+  <table>
+    <thead><tr><th>Simptom</th><th>Šta je</th></tr></thead>
+    <tbody>
+      <tr><td>prepis je na ijekavici</td><td>jezik ostavljen na „auto" — zadaj srpski i ponovi</td></tr>
+      <tr><td>nedostaje kraj snimka</td><td>proveri praznine; probaj drugu detekciju govora</td></tr>
+      <tr><td>titl „pliva" u odnosu na sliku</td><td>ispravka je razbila poravnanje — vidi upozorenje u editoru</td></tr>
+      <tr><td>prevod sadrži srpske reči</td><td>rečenica je crvena u editoru, ispravi ručno</td></tr>
+      <tr><td>dugme ▶ ne radi</td><td>radna kopija zvuka je obrisana (posle {{ wav_ttl_days }} dana)</td></tr>
+    </tbody>
+  </table>
+</section>
+{% endblock %}

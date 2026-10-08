@@ -1,0 +1,40 @@
+{# Baza projekata. Ne osvežava se kao celina; dok nešto radi, menjaju se
+   samo pilule (index.html, /api/jobs/status). #}
+{% from "_help.html" import why %}
+<header>
+  <h2><span class="field-label">Baza projekata{{ why("Projekat se može obrisati i dok radi. Obrada staje na prvoj prirodnoj tački, ne usred poziva modelu, pa brisanje ume da potraje par sekundi.", za="Baza projekata") }}</span></h2>
+  <span class="count">{{ jobs|length }}</span>
+  <span class="disk" title="ukupno zauzeće foldera jobs/">{{ disk_total }} na disku</span>
+</header>
+{% if deleted %}
+  <p class="done-note" role="status">Projekat „{{ deleted.name }}“ obrisan — oslobođeno {{ deleted.freed }}.</p>
+{% endif %}
+<div class="plist">
+  {% if not jobs %}
+    <p class="empty-list">Još nema projekata.</p>
+  {% endif %}
+  {% for j in jobs %}
+    <div class="p">
+      <div class="name">
+        <a href="/jobs/{{ j.id }}" title="{{ j.source_name }}">{{ j.name }}</a>
+        <div class="meta">
+          {{ j.date }} · <em>{% if j.duration %}{{ ('%.1f'|format(j.duration / 60))|replace('.', ',') }} min{% else %}—{% endif %}</em>
+          · {{ j.langs }} · {{ j.disk.total_h }}
+          {%- if j.disk.has_source %}
+            <span title="radni WAV; briše se sam posle {{ wav_ttl_days }} dana">(WAV {{ j.disk.source_h }})</span>
+          {%- endif %}
+        </div>
+      </div>
+      <span class="pill {{ j.pill.cls }}" id="pill-{{ j.id }}" {% if j.pill.title %}title="{{ j.pill.title }}"{% endif %}>
+        {{ j.pill.text }}{% if j.pending and j.pill.cls != 'run' %} · u redu{% endif %}
+      </span>
+      <form method="post" action="/jobs/{{ j.id }}/delete"
+            data-confirm-title="Obrisati „{{ j.name }}“?"
+            data-confirm-body="Briše se zvuk, prepis i svi titlovi — {{ j.disk.total_h }}. Ovo se ne može poništiti.{% if j.pending %}
+Projekat ima zadatak u toku ili u redu — biće otkazan.{% endif %}"
+            data-confirm-ok="Obriši projekat" data-confirm-danger="true">
+        <button class="link danger" type="submit">obriši</button>
+      </form>
+    </div>
+  {% endfor %}
+</div>

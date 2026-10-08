@@ -1,0 +1,10 @@
+{# Indikator obrade u zaglavlju. Osvežava ga HTMX na 3s.
+   Žuto i pulsira samo kad se nešto radi; zeleno-plavo kad miruje; crveno kad ne radi. #}
+{% if worker.alive %}
+  <span class="dot {% if worker.queued %}busy{% else %}on{% endif %}"
+        title="poslednji otkucaj pre {{ worker.age }}s ({{ worker.mode }})"></span>
+  obrada aktivna{% if worker.queued %} · {{ worker.queued }} u redu{% endif %}
+{% else %}
+  <span class="dot off" title="{% if worker.age %}poslednji otkucaj pre {{ worker.age }}s{% else %}nema otkucaja{% endif %}"></span>
+  <span class="err">obrada ne radi{% if worker.queued %} — {{ worker.queued }} zadataka čeka{% endif %}</span>
+{% endif %}

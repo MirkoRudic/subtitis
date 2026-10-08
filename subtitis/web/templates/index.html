@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% from "_help.html" import why %}
+{% block title %}Subtitis{% endblock %}
+
+{% block content %}
+<div class="entries">
+
+  <section class="entry">
+    <div>
+      <h2>Transkribuj</h2>
+      <p class="lede">Uploaduj snimak za transkripciju.</p>
+    </div>
+    {# Whisper model se namerno ne bira ovde — vidi `create_job` u app.py.
+       Profil, glosar i filter tišine nisu ovde: profil se bira na stranici
+       projekta (ne pokreće obradu), glosar u podešavanjima, filter u izveštaju. #}
+    <form method="post" action="/jobs" enctype="multipart/form-data" class="entry-form">
+      <div class="drop-field">
+      <span class="lbl field-label">Snimak{% call why("Audio ili video, bilo koji format. Iz videa se zvuk izdvaja sam.", za="Snimak") %}
+        <p>Fajl se odmah pretvara u radnu kopiju (16 kHz mono) i dalje se radi samo
+        sa njom. Radna kopija zauzima oko 115 MB po satu snimka i briše se
+        automatski posle {{ wav_ttl_days }} dana.</p>{% endcall %}</span>
+      <label class="drop" data-kind="audio">
+        <input type="file" name="audio" required
+               accept="audio/*,video/*,.wav,.mp3,.m4a,.mp4,.mkv,.opus,.flac">
+        <span class="empty">
+          <span class="pick">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m6 10 6-6 6 6"/><path d="M4 20h16"/></svg>
+            Izaberi snimak
+          </span>
+        </span>
+        <span class="empty sub">ili prevuci ovde · audio i video, do {{ max_upload }}</span>
+        <span class="file">
+          <span class="ficon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>
+          <span class="fmeta"><span class="fname"></span><span class="fsub"></span></span>
+          <button type="button" class="swap">zameni</button>
+        </span>
+      </label>
+      </div>
+
+      <div class="fields narrow">
+        <label class="f"><span class="field-label">Jezik u snimku{% call why("Jezik koji se govori u snimku. <strong>Za srpski obavezno izaberi ručno.</strong>", za="Jezik u snimku") %}
+          <p>Automatska detekcija srpski redovno prepozna kao hrvatski i vrati
+          ijekavicu („djeca", „prije"), koju posle treba ispravljati ručno. Alat
+          ima ekavizaciju koja to hvata, ali bolje je da do toga ne dođe.</p>
+          <p>Ako ipak izabereš „auto", posle prepoznavanja ti se prikaže koji je
+          jezik detektovan i sa kojom sigurnošću — proveri to pre nego što kreneš
+          u korekturu.</p>{% endcall %}</span>
+          <select name="language">
+            {% for code, name in source_langs %}
+              <option value="{{ code }}" {% if code == 'sr' %}selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+
+      {# Sadržaj, ne objašnjenje: razvija se POLJE za unos. Zatvoreno po
+         podrazumevanom stanju; sa upisanim tekstom ostaje otvoreno (base.html). #}
+      <details class="terms-toggle" id="termini">
+        <summary>dodaj termine iz snimka</summary>
+        <label class="terms"><span class="field-label">Termini iz ovog snimka{{ why("Imena i reči koje se izgovaraju u snimku. Ulaze u prepoznavanje govora ovog projekta, uz glosar iz podešavanja.", za="Termini iz ovog snimka") }}</span>
+          <textarea name="terms" rows="3"
+                    placeholder="jedan po redu, npr.&#10;Valjevo&#10;Mileva"></textarea>
+        </label>
+        <p class="terms-note">Termini ulaze u prepoznavanje kad pokreneš transkripciju. Ne snimaju se posebno.</p>
+      </details>
+
+      <div class="actions">
+        <button type="submit" class="btn primary">Transkribuj</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="entry">
+    <div>
+      <h2>Prevod SRT-a</h2>
+      <p class="lede">Prevedi gotov SRT fajl. Vremena se ne diraju.</p>
+    </div>
+    <form method="post" action="/jobs/srt" enctype="multipart/form-data" class="entry-form">
+      <div class="drop-field">
+      <span class="lbl field-label">SRT fajl{{ why("Cue-ovi i vremena ostaju isti kao u ulazu — menja se samo tekst. Nema transkripcije; prevod kreće odmah. Cue-ovi koji posle prevoda probiju profil se prijavljuju i obeležavaju, ništa se ne skraćuje samo.", za="SRT fajl") }}</span>
+      <label class="drop" data-kind="srt">
+        <input type="file" name="srt_file" required accept=".srt,application/x-subrip,text/plain">
+        <span class="empty">
+          <span class="pick">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m6 10 6-6 6 6"/><path d="M4 20h16"/></svg>
+            Izaberi SRT
+          </span>
+        </span>
+        <span class="empty sub">ili prevuci ovde · .srt</span>
+        <span class="file">
+          <span class="ficon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+          <span class="fmeta"><span class="fname"></span><span class="fsub"></span></span>
+          <button type="button" class="swap">zameni</button>
+        </span>
+      </label>
+      </div>
+
+      <div class="arrowline">
+        <label class="f" style="flex:1"><span>Sa jezika</span>
+          <select name="language">
+            {% for code, name in target_langs %}
+              <option value="{{ code }}" {% if code == 'sr' %}selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <span class="ar">→</span>
+        <label class="f" style="flex:1"><span>Na jezik</span>
+          <select name="target">
+            {% for code, name in target_langs %}
+              <option value="{{ code }}" {% if code == default_target %}selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+
+      <div class="actions">
+        <button type="submit" class="btn primary">Prevedi</button>
+      </div>
+    </form>
+  </section>
+
+</div>
+
+{# Lista se NE osvežava kao celina (krug 11): skrol je skakao na vrh, a
+   brisanje se gubilo jer je forma zamenjena usred potvrde. Dok bar jedan
+   projekat radi, menjaju se samo pilule (/api/jobs/status). #}
+<section class="projects" id="projekti" data-active="{{ 'true' if any_active else 'false' }}">
+  {% include "_jobs.html" %}
+</section>
+
+<script>
+// Pilule statusa: samo dok nešto radi, i samo pilule — ne cela lista.
+(function () {
+  const box = document.getElementById("projekti");
+  if (!box || box.dataset.active !== "true") return;
+  const tick = async () => {
+    let data;
+    try { data = await (await fetch("/api/jobs/status")).json(); } catch (e) { return setTimeout(tick, 3000); }
+    for (const [id, j] of Object.entries(data.jobs)) {
+      const pill = document.getElementById("pill-" + id);
+      if (!pill) continue;
+      pill.textContent = j.text + (j.pending && j.cls !== "run" ? " · u redu" : "");
+      pill.className = "pill " + j.cls;
+      pill.title = j.title || "";
+    }
+    if (data.active) setTimeout(tick, 3000);
+  };
+  setTimeout(tick, 3000);
+})();
+
+// Izbor fajla: dugme, prevlačenje, i popunjeno stanje sa imenom i veličinom.
+// Za SRT se broj cue-ova i trajanje čitaju iz samog fajla, pre otpremanja.
+function humanSize(n) {
+  const u = ["B", "kB", "MB", "GB"]; let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return (i ? n.toFixed(1).replace(".", ",") : n) + " " + u[i];
+}
+function srtStats(text) {
+  const times = [...text.matchAll(/(\d+):(\d\d):(\d\d)[,.](\d+)\s*-->\s*(\d+):(\d\d):(\d\d)[,.](\d+)/g)];
+  if (!times.length) return "";
+  const last = times[times.length - 1];
+  const end = (+last[5]) * 3600 + (+last[6]) * 60 + (+last[7]);
+  return `${times.length} cue-ova · ${(end / 60).toFixed(1).replace(".", ",")} min`;
+}
+document.querySelectorAll("label.drop").forEach(drop => {
+  const input = drop.querySelector("input[type=file]");
+  const show = () => {
+    const f = input.files && input.files[0];
+    drop.classList.toggle("filled", !!f);
+    if (!f) return;
+    drop.querySelector(".fname").textContent = f.name;
+    const sub = drop.querySelector(".fsub");
+    sub.textContent = humanSize(f.size);
+    if (drop.dataset.kind === "srt") {
+      f.text().then(t => { const s = srtStats(t); if (s) sub.textContent = s; });
+    }
+  };
+  input.addEventListener("change", show);
+  drop.querySelector(".swap").addEventListener("click", (e) => { e.preventDefault(); input.click(); });
+  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", (e) => {
+    e.preventDefault(); drop.classList.remove("over");
+    if (e.dataTransfer.files.length) { input.files = e.dataTransfer.files; show(); }
+  });
+});
+</script>
+{% endblock %}

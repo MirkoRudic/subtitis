@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "src_lang": "sr",
+  "tgt_lang": "en",
+  "variant": "en-GB",
+  "note": "Svi parovi su IZMIŠLJENI — napisani da mere iste pojave kao stvarni materijal na kom je alat razvijan, bez ijedne stvarne izjave. src je ISPRAVLJEN od ASR grešaka: u stvarnom toku original se koriguje pre prevoda, pa merilo mora biti čisto. Oblici kakve ASR tipično vrati su u polju asr_raw gde se razlikuju.",
+  "pairs": [
+    {
+      "src": "Zovem se Tamara, radim u Radionici otvorenih vrata kao animatorka.",
+      "asr_raw": "Zovem se Tamara, radim u Radionici otvorenih vrta kao animatorka.",
+      "ref": "My name is Tamara and I work as an activity leader at the Open Door Workshop.",
+      "why": "Naziv organizacije ima ustaljeni engleski prevod koji model bez glosara promaši. 'Animatorka' u ovom kontekstu nije 'animator' ni 'entertainer' nego 'activity leader' / 'youth worker'."
+    },
+    {
+      "src": "Ovog leta smo sa decom bili na Divčibarama, u okviru programa Otvorena vrata.",
+      "asr_raw": "Ovog leta smo sa decom bili na Divčibarima, u okviru programa otvorena vrata.",
+      "ref": "This summer we took the children to Divčibare as part of the Open Door programme.",
+      "why": "Toponim se ne prevodi i zadržava dijakritiku. 'Otvorena vrata' je ime programa, ne opis — mora ostati veliko slovo i ne sme postati 'open doors' malim slovima."
+    },
+    {
+      "src": "Tamo se deca druže, igraju, uče jedni od drugih, i ono što je najvažnije",
+      "asr_raw": "Tamo se deca druže igraju uče jedni od drugih i ono što je najvažnije",
+      "ref": "There the children socialise, play, learn from one another, and what matters most",
+      "why": "Nedovršena rečenica — mora ostati nedovršena, ne sme se zatvoriti tačkom. 'Druže se' nema doslovan ekvivalent; 'socialise' je najbliže."
+    },
+    {
+      "src": "Cilj programa je da mladi prihvate međusobne različitosti koje poseduju i da kroz zajedničke aktivnosti razviju saradnju.",
+      "ref": "The aim of the programme is for young people to accept their differences and learn to work together through shared activities.",
+      "why": "'Različitosti koje poseduju' je birokratski pleonazam u originalu — dobar prevod ga sažima u 'their differences'. Test da li model prevodi značenje ili reči."
+    },
+    {
+      "src": "To je za njih stvarno jedna promena prosto sredine, i to im mnogo znači.",
+      "ref": "For them it's a real change of scenery, and it means a lot to them.",
+      "why": "Govorni red reči ('promena prosto sredine'). Test da li model razmrsi sintaksu umesto da je preslika."
+    },
+    {
+      "src": "S obzirom na to da većina dece tokom godine ne izlazi iz grada, ovo im je prilika da provedu nekoliko dana u prirodi, daleko od ekrana i svakodnevnih obaveza.",
+      "asr_raw": "Obzirom da većina dece tokom godine ne izlazi iz grada, ovo im je prilika da provedu nekoliko dana u prirodi, daleko od ekrana i svakodnevnih obaveza.",
+      "ref": "Because most of the children don't leave the city during the year, this is a chance for them to spend a few days in nature, away from screens and everyday chores.",
+      "why": "'S obzirom na to da' ne treba prevoditi kao 'considering that' — u titlu je 'because' prirodnije i kraće. Duga rečenica, test koherentnosti."
+    },
+    {
+      "src": "Nisu imali ni opremu, ni prevoz, ni",
+      "asr_raw": "Nisu imali ni opremu ni prevoz ni",
+      "ref": "They had neither the equipment nor the transport, nor",
+      "why": "Rečenica se prekida i nastavlja u sledećoj — konstrukcija 'ni... ni...' mora ostati otvorena preko granice cue-a. Najteži par u setu."
+    },
+    {
+      "src": "nekoga ko bi ih vodio, pa smo zajedno planirali, pakovali, putovali i učili kako da se snađemo u šumi.",
+      "asr_raw": "nekoga ko bi ih vodio pa smo zajedno planirali pakovali putovali i učili kako da se snađemo u šumi.",
+      "ref": "anyone to lead them, so together we planned, packed, travelled and learned how to find our way in the woods.",
+      "why": "Nastavak prethodne rečenice — počinje malim slovom i mora tako ostati. Niz od četiri glagola, test da li model održi paralelnu konstrukciju."
+    },
+    {
+      "src": "Meni je bilo najlepše kad smo pravili vatru, a naša animatorka ima veliko srce i uvek nam pomogne.",
+      "asr_raw": "Meni je bilo najlepše kad smo pravili vatru, a naša animatorka ima velko srce i uvek nam pomogne.",
+      "ref": "My favourite part was making the fire, and our activity leader has a big heart and always helps us.",
+      "why": "Govori dete — registar mora ostati jednostavan. 'Veliko srce' je idiom koji na engleskom radi doslovno; test da li ga model prepozna."
+    }
+  ]
+}

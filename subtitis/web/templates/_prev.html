@@ -1,0 +1,8 @@
+{#- Cue-ovi gotovog titla iz rečenice `r` — SAMO prikaz; uređuje se rečenica.
+    Element postoji i kad je prazan: posle prelamanja ga odgovor zamenjuje po
+    id-ju (`oob`), bez osvežavanja cele strane (krug 13). -#}
+<div class="cue-prev" id="prev-{{ r.id }}" aria-label="prelom u titlu"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {%- for c in r.preview %}
+  <div class="cp {{ c.mark or '' }}"{% if c.mark == 'over' %} title="probija profil"{% elif c.mark == 'short' %} title="kraći od najkraćeg trajanja"{% elif c.mark == 'over-same' %} title="probija profil, ali kao i u originalu"{% endif %}><span class="n">{{ c.n }}</span><span class="t">{{ c.s|timecode }}</span><span class="l">{{ c.html|safe }}</span></div>
+  {%- endfor -%}
+</div>

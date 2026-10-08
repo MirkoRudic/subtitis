@@ -1,0 +1,73 @@
+{% from "_help.html" import why %}
+{#- „Za preuzimanje". Posle prelamanja ga odgovor zamenjuje po id-ju (krug 13). -#}
+<section class="panel" id="downloads"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <h3><span class="field-label">Za preuzimanje{% call why("Fajl se prepisuje pri svakom prelamanju. Novi jezik dodaje nov red.", za="Za preuzimanje") %}
+      <p>Ime fajla nosi jezik i pismo (<code>sr-Latn</code>), a ne profil, pa svako
+      prelamanje istog jezika piše u isti fajl. Zato ispod spiska piše čime je
+      postojeći fajl napravljen.</p>{% endcall %}</span></h3>
+  {% if outputs %}
+    <div class="dllist">
+      {% for f in outputs %}
+        <a class="dlrow" href="/jobs/{{ job.id }}/download/{{ f.name }}">
+          <span class="lang">{{ f.label }}</span>
+          <span class="fn">{{ f.name }}</span>
+          <span class="sz">{% if f.cues is not none %}{{ f.cues }} cue-ova · {% endif %}{{ f.size_kb|dec }} kB</span>
+          <span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="m6 10 6 6 6-6"/><path d="M4 20h16"/></svg></span>
+        </a>
+      {% endfor %}
+    </div>
+    {% if built %}
+      {# Ime fajla je po BCP-47 i ne nosi profil, pa se svi profili pišu u
+         isti fajl. Bez ovog reda se ne vidi šta je primenjeno. #}
+      <p class="note">
+        Napravljeno profilom <strong>{{ built.profile }}</strong>, pismo
+        {{ built.script }}{% if built.case == 'upper' %}, VELIKA SLOVA{% elif built.case == 'lower' %}, mala slova{% endif %}{% if built.drop_punct %}, bez interpunkcije{% endif %}{% if built.cues %}, {{ built.cues }} cue-ova{% endif %}.
+        {% if not disk.has_source and not srt_job %}Radni WAV je obrisan — dugme ▶ ne radi.{% endif %}
+        {% if srt_job and built.overflow_count is not none %}
+          {% if built.overflow_count %}
+            <span class="err">{{ built.overflow_count }} cue-ova probija profil</span>{% if built.worse_count is not none %},
+            od toga <strong class="err">{{ built.worse_count }} gore nego isti cue u originalu</strong>
+            — tu skraćuj (crveno u editoru){% endif %}; ništa nije skraćeno.
+            {% for sg in built.profile_suggestions %}
+              <br>Sva su CPS: profil <strong>{{ sg.profile }}</strong>
+              ({{ '%g'|format(sg.max_cps) }} CPS) bi ih smanjio sa
+              {{ built.overflow_count }} na {{ sg.overflow }}.
+            {% endfor %}
+          {% else %}
+            Nijedan cue ne probija profil.
+          {% endif %}
+        {% endif %}
+        {% if built.too_short %}
+          <br><span class="err">{{ built.too_short|length }} cue-ova kraće od
+          {{ '%g'|format(built.min_duration)|replace('.', ',') if built.min_duration else 'najkraćeg trajanja profila' }} s</span>
+          i posle produžavanja:
+          {% for c in built.too_short %}#{{ c.cue }} ({{ c.at }}, {{ '%.2f'|format(c.dur)|replace('.', ',') }} s){% if not loop.last %}; {% endif %}{% endfor %}<span class="field-label">.{% call why(za="Prekratki cue-ovi", kratko="Ispod najkraćeg trajanja natpis trepne. Alat ga produži koliko može; ovi su ostali kratki jer odmah pre i posle njih stoji drugi natpis.") %}
+          <p>Ništa nije izbačeno ni spojeno — kratak natpis je u titlu, samo
+          kraće na ekranu nego što profil traži. Pogledaj ga uz sliku.</p>
+          {% endcall %}</span>
+        {% endif %}
+      </p>
+      {% if srt_job and built.worse_count and is_translation and not shorten %}
+        <form method="post" action="/jobs/{{ job.id }}/shorten" class="actions left">
+          <input type="hidden" name="language" value="{{ active }}">
+          <span class="field-label"><button type="submit" class="btn sm ghost" {% if pending %}disabled{% endif %}>Skrati prekoračenja</button>
+        {% call why(za="Skrati prekoračenja", kratko="Šalje modelu samo rečenice koje su posle prevoda teže za čitanje nego original. <strong>Ništa se ne upisuje bez tvog pregleda.</strong>") %}
+          <p>Prevod je na ovom materijalu bio duži od srpskog originala — na
+          francuski 17%, na engleski 6% — a vremena su fiksna, pa brzina
+          čitanja mora da poraste. Prelamanje to ne može rešiti — ono
+          raspoređuje tekst, ne skraćuje ga.</p>
+          <p>Model seče više nego što se traži: za potrebnih 1–2 znaka ume da
+          skrati i 40. Mereno čitanjem svih prihvaćenih predloga: oko tri
+          četvrtine je čisto (izbačene poštapalice i ponavljanja), oko desetine
+          menja značenje, ostatak gubi sadržaj — jednom i šalu koja je bila
+          poenta rečenice.</p>
+          <p>Zato predlozi skraćeni znatno više od traženog stoje <strong>bez
+          kvačice</strong> i moraš ih uključiti ručno.</p>
+        {% endcall %}</span>
+        </form>
+      {% endif %}
+    {% endif %}
+  {% else %}
+    <p class="muted">Još nema SRT-a.</p>
+  {% endif %}
+</section>

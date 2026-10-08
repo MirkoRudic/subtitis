@@ -1,0 +1,11 @@
+{
+  "name": "web",
+  "note": "Vertikalni video: natpis preko sredine kadra, jedan red od 10 do 20 znakova.",
+  "_zasto": "Dosadašnji `digital` (krugovi 6 i 7, merenja u merenja/dnevnik.md pod tim imenom).",
+  "max_chars_per_line": 20,
+  "min_chars_per_line": 10,
+  "max_lines": 1,
+  "max_cps": 20,
+  "min_duration": 0.50,
+  "max_duration": 4.0
+}

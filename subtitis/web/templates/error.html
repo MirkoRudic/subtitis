@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Greška {{ status }} — Subtitis{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <h3>Nije prošlo</h3>
+  <div class="flagbar err"><span class="ic">!</span><span>{{ detail }}</span></div>
+  <p class="muted small">Kod {{ status }}. Ništa nije promenjeno.</p>
+  <p><a href="javascript:history.back()">Nazad</a> · <a href="/">Na bazu projekata</a></p>
+</section>
+{% endblock %}

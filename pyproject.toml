@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "subtitis"
+description = "SRT titlovi iz audija: ASR, prelamanje, prevod"
+requires-python = ">=3.11,<3.12"
+dynamic = ["version", "dependencies"]
+
+[project.scripts]
+subtitis = "subtitis.cli:main"
+
+[tool.setuptools]
+packages = ["subtitis"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+# jedino mesto verzije je `subtitis/__init__.py`
+version = { attr = "subtitis.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

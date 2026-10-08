@@ -1,0 +1,30 @@
+{#
+  Objašnjenje: UVEK ikonica uz oznaku, UVEK prozorčić (krug 12).
+
+  Sadržaj stoji u <template> i prikazuje ga jedan zajednički prozorčić iz
+  base.html — lebdi iznad sadržaja, ništa ne pomera, zatvara se klikom van,
+  ponovnim klikom i Esc, i otvoren je najviše jedan. Nikad traka koja se
+  razvija, nikad red teksta na stranici.
+
+    <span>Profil {{ why("Prvi pasus.", za="Profil") }}</span>
+    {% call why("Prvi pasus.", za="Slova") %}<p>Ostatak.</p>{% endcall %}
+
+  `za` je ime polja: ide u aria-label („Objašnjenje: Profil").
+  `help` je stari potpis (kratko, duže) i radi isto — ostao da stari pozivi
+  ne bi tiho iscrtali drugačiji oblik.
+#}
+{% macro why(kratko=None, za="") -%}
+  <span class="info" role="button" tabindex="0" aria-expanded="false"
+        aria-label="Objašnjenje{% if za %}: {{ za }}{% endif %}" title="objašnjenje"><template>
+      {%- if kratko %}<p>{{ kratko|safe }}</p>{% endif %}
+      {%- if caller is defined %}{{ caller() }}{% endif -%}
+    </template></span>
+{%- endmacro %}
+
+{% macro help(kratko, duze=None, za="") -%}
+  <span class="info" role="button" tabindex="0" aria-expanded="false"
+        aria-label="Objašnjenje{% if za %}: {{ za }}{% endif %}" title="objašnjenje"><template>
+      {%- if kratko %}<p>{{ kratko|safe }}</p>{% endif %}
+      {%- if caller is defined %}{{ caller() }}{% elif duze %}{{ duze|safe }}{% endif -%}
+    </template></span>
+{%- endmacro %}

@@ -1,0 +1,11 @@
+{
+  "name": "tv",
+  "note": "Klasičan titl: dva reda do 42 znaka. Podrazumevani izbor.",
+  "_zasto": "Vrednosti dosadašnjeg `web` (krug 6), a pre toga `netflix` (42/20): sve je mereno na 42/20. Krug 8 je promenio samo ime — `web` sada znači jednoredni natpis. Stari poslovi su prevedeni migracijom (subtitis/migrate.py), ne pseudonimom: ime `web` u starom job.json ne može da se razlikuje od novog.",
+  "max_chars_per_line": 42,
+  "max_lines": 2,
+  "max_cps": 20,
+  "min_duration": 0.833,
+  "max_duration": 7.0,
+  "min_gap": 0.083
+}

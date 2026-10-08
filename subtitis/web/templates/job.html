@@ -1,0 +1,1114 @@
+{% extends "base.html" %}
+{% from "_help.html" import help, why %}
+{% block title %}{{ name }} — Subtitis{% endblock %}
+
+{% block content %}
+{# ---- 1. Zaglavlje projekta ---- #}
+<div class="pjhead">
+  <h1 title="{{ job.source_name }}">{{ name }}</h1>
+  <span class="pill {{ pill.cls }}" id="job-status" {% if pill.title %}title="{{ pill.title }}"{% endif %}>{{ pill.text }}</span>
+  {% if retry and not pending %}
+    {# Korak koji je pao, uz pilulu greške: zvuk i prepis su obično u redu. #}
+    <form method="post" action="/jobs/{{ job.id }}/retry" class="retry">
+      <button type="submit" class="btn sm ghost" title="ponovo: {{ retry|join(', ') }}">Pokušaj ponovo</button>
+    </form>
+  {% endif %}
+  {% if pending %}<span class="meta" id="queued">zadatak u redu…</span>{% endif %}
+  <span class="meta">
+    {% if job.duration %}{{ ('%.1f'|format(job.duration / 60))|replace('.', ',') }} min · {% endif %}{{ langs_label }} · {{ disk.total_h }}
+  </span>
+  {% if detected %}
+    <span class="meta" title="jezik koji je model prepoznao; radi se kao {{ active }}">
+      jezik: {{ detected.language }} ({{ detected.pct|dec }}%)
+      {%- if not detected.matches %} <span class="err">— zadato je {{ active }}</span>{% endif %}
+    </span>
+  {% endif %}
+</div>
+<div class="progress"><div id="bar" style="width:0%"></div></div>
+<div class="note" id="progress-label"></div>
+
+{# ---- 2. Trake upozorenja, pre svega ostalog ---- #}
+{% if job.status == 'error' %}
+  <div class="flagbar err">
+    <span class="ic">!</span>
+    <span><b>Projekat je pao.</b> Ono što je zavisilo od ovog koraka nije
+      pokrenuto — preskočeno je, nije „gotovo".
+      {% if job.error %}<pre class="err">{{ job.error }}</pre>{% endif %}
+      {% if bad_tasks %}
+        <ul class="small">
+          {% for t in bad_tasks %}
+            <li><code>{{ t.kind }}</code> — {{ t.state }}{% if t.error %}: {{ t.error|truncate(200) }}{% endif %}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </span>
+  </div>
+{% elif job.error %}
+  <div class="flagbar err"><span class="ic">!</span><pre class="err">{{ job.error }}</pre></div>
+{% endif %}
+
+{% for u in untranslated %}
+  <div class="flagbar err">
+    <span class="ic">!</span>
+    <span>
+      {% for g in u.groups %}
+        <p><b>{{ u.lang }}: {{ g.head }}{% if g.cues %} — {{ g.cues }}{% endif %}</b> — {{ g.why }}.</p>
+        <ul class="small">
+          {% for i in g.sentences %}
+            <li>rečenica {{ i.sentence }}{% if i.cues %} — cue {{ i.cues|join(', ') }}{% endif %}
+              {% if i.reason != 'translation_failed' %}<span class="muted">({{ i.reason }})</span>{% endif %}</li>
+          {% endfor %}
+        </ul>
+      {% endfor %}
+      Obojene su crveno u editoru
+      (<a href="/jobs/{{ job.id }}?lang={{ u.lang }}">otvori {{ u.lang }}</a>);
+      ručna ispravka skida oznaku.
+    </span>
+  </div>
+{% endfor %}
+
+{% if halluc_items %}
+  <div class="flagbar err">
+    <span class="ic">!</span>
+    <span><b>{{ halluc_words }} {{ 'reč' if halluc_words == 1 else 'reči' }} bez zvuka iza sebe</b> — gotovo sigurno izmišljene.
+      {% for h in halluc_items %}<code>{{ h.text }}</code> u {{ h.at }}{% if not loop.last %}; {% endif %}{% endfor %}.
+      Precrtane su u editoru; izbaci ih pa će oznaka nestati.</span>
+  </div>
+{% endif %}
+
+{% if summary and summary.silence_pct and not srt_job %}
+  <div class="flagbar warn">
+    <span class="ic">~</span>
+    <span><b>{{ summary.silence_pct|dec }}% snimka nije govor</b> — muzika, džingl, špica ili tišina.
+      Model je slušao i te delove, pa je tu mogao da izmisli tekst.
+      Filter izbacuje delove bez govora pre prepoznavanja; na tihom govoru ume da pojede poneku reč.
+      <span class="flagact">
+        {% if not (sf and sf.edited_by_human) %}
+          <form method="post" action="/jobs/{{ job.id }}/retranscribe"
+                data-confirm-title="Ponoviti prepoznavanje sa filterom tišine?"
+                data-confirm-body="Trenutni prepis se zamenjuje novim."
+                data-confirm-ok="Ponovi sa filterom">
+            <input type="hidden" name="vad_preset" value="normalno">
+            <button type="submit" class="btn sm ghost" {% if pending %}disabled{% endif %}>Ponovi sa filterom</button>
+          </form>
+        {% endif %}
+      </span>
+    </span>
+  </div>
+{% endif %}
+
+{% if task_summary.get('skipped') %}
+  <div class="flagbar err"><span class="ic">!</span><span>preskočenih zadataka: {{ task_summary['skipped'] }}</span></div>
+{% endif %}
+
+{% if srt_job %}
+  <div class="flagbar info">
+    <span class="ic">i</span>
+    <span><span class="field-label"><b>Vremena iz tvog fajla ostaju netaknuta.</b>{% call why("Broj cue-ova i sva vremena u izlazu identični su ulazu — menja se samo tekst. Provera se izvodi pre upisa: ako se tajming razlikuje, fajl se ne zapisuje.", za="Prevod gotovog SRT-a") %}
+          <p><strong>Ograničenja ovog režima.</strong> U ovom režimu nema zvuka, pa nema ni preslušavanja ni bojenja po sigurnosti.</p>
+          <p><strong>Kurziv preko dela rečenice se gubi</strong> i takav cue ti se
+          prijavi. Cue koji je ceo u kurzivu ostaje u kurzivu.</p>
+          <p><strong>Nedosledna interpunkcija u ulazu pravi greške.</strong> Cue
+          <code>Ja sam Bojan</code> bez tačke, praćen cue-om <code>Imam dva psa</code>,
+          daje rečenicu u kojoj model čita <code>Imam</code> kao prezime:
+          <code>Je m'appelle Bojan Imam</code>. Ako ulaz nema tačke na krajevima
+          rečenica, dodaj ih pre prevoda.</p>{% endcall %}</span>
+    </span>
+  </div>
+{% endif %}
+
+{# ---- 3. Editor ---- #}
+<section class="panel" id="editor">
+  <div class="edhead">
+    <h3><span class="field-label">Editor{% if langs|length > 1 %} — {{ active }}{% endif %}
+      {%- if not srt_job or (sf and sf.edited_by_human) %}{% call why(za="Editor") %}
+        {%- if sf and sf.edited_by_human %}
+        <p><strong>Tvoje ispravke su sačuvane.</strong> Ponovno prepoznavanje bi ih
+        obrisalo, pa je isključeno. Titl i prevod rade normalno.</p>{% endif %}
+        {%- if not srt_job %}
+        <p><strong>Kako se koristi editor</strong></p>
+        <p><strong>Žuto obojene reči</strong> — model nije siguran u njih. To nije
+        isto što i greška: kratke reči (<code>i</code>, <code>ali</code>,
+        <code>od</code>) model često oboji iako ih je tačno prepoznao. Preslušaj
+        pa odluči.</p>
+        <p><strong>Crveno precrtane reči</strong> — {{ halluc_note }}</p>
+        <p><strong>Crvena rečenica</strong> — prevod je sumnjiv: ili je ostao na
+        izvornom jeziku, ili je gotovo identičan originalu. Ručna ispravka skida
+        oznaku.</p>
+        <p><strong>Dugme ▶</strong> — pušta isečak snimka tačno za tu rečenicu.</p>
+        <p><strong>Vremena se čuvaju pri ispravci.</strong> Kad izmeniš tekst,
+        nepromenjene reči zadrže stvarna vremena iz prepoznavanja; interpoliraju se
+        samo reči koje si dodao. Ako prepišeš rečenicu iz korena, poravnanje se
+        izgubi i dobićeš upozorenje.</p>
+        <p><strong>Snima se samo.</strong> Pri svakom ručnom snimanju pravi se
+        kopija, pri automatskom najviše jedna na 5 minuta. Postoji poništavanje,
+        povratak na poslednje snimljeno stanje i lista ranijih verzija (poslednjih
+        20).</p>
+        <p><strong>Ispravke se ne brišu.</strong> Kad je prepis jednom ispravljen,
+        ponovno prepoznavanje se više ne nudi — ono bi napravilo nov prepis preko
+        tvog.</p>{% endif %}{% endcall %}{% endif %}</span></h3>
+    {% if langs|length > 1 %}
+      <span class="langs">
+        {% for l in langs %}
+          <a class="{% if l == active %}on{% endif %}" href="/jobs/{{ job.id }}?lang={{ l }}">{{ l }}</a>
+        {% endfor %}
+      </span>
+    {% endif %}
+    <span class="n">
+      {{ rows|length }} rečenica
+      {%- if srt_job %} · {{ over_rows }} u cue-ovima gorim od originala
+      {%- elif source_lang %} · {{ low_source_rows }} sa nesigurnim rečima u originalu
+      {%- else %} · {{ low_rows }} {{ 'nesigurna' if low_rows == 1 else 'nesigurnih' }}{% if halluc_rows %} · {{ halluc_rows }} {{ 'izmišljena' if halluc_rows == 1 else 'izmišljenih' }}{% endif %}{% endif %}
+    </span>
+    {% if sf %}
+      <span id="save-state" class="small muted" role="status"></span>
+      <span id="save-icon" class="disk clean" title="sve izmene su sačuvane" aria-label="sve izmene su sačuvane">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
+      </span>
+      <button id="save" type="button" class="btn sm primary">Snimi izmene</button>
+      <button id="undo" type="button" class="btn sm ghost" disabled
+              title="Ctrl+Z — vraća poslednju izmenu u editoru">Poništi</button>
+    {% endif %}
+  </div>
+
+  {# Svaki meni ima stalno ime (aria-label): meni unutar <label> bi ime
+     sastavljao od oznake I trenutne vrednosti („Profil web"), a pregledač
+     ga posle promene ume da ne osveži — čitač bi čitao staru vrednost.
+     Profil · Pismo · Slova · Interpunkcija. Bez dugmeta (krug 13): svaka
+     promena prelama odmah — sinhrono, oko sekunde, bez modela — a odgovor
+     menja samo prelom ispod rečenica i „Za preuzimanje". Dve brze promene
+     zaredom daju jedno prelamanje (300 ms). #}
+  <form class="edbar" id="build-form" hx-post="/jobs/{{ job.id }}/rebuild"
+        hx-trigger="change delay:300ms, rebuild" hx-swap="none" hx-indicator="#editor">
+    <input type="hidden" name="language" value="{{ active }}">
+    <label class="f"><span class="field-label">Profil
+      {%- if srt_job %}{% call why("<strong>original</strong> — izveden iz tvog ulaznog fajla <em>(preporučeno)</em>", za="Profil") %}
+        <p>Standardni profili ovde nemaju smisla. Ručno doteran titl po pravilu
+        probija normu profila <code>tv</code> — na jednom stvarnom projektu 26 redova od 219
+        bilo je duže od 42 znaka, a 18 cue-ova od 204 brže od 20 znakova/s. Mereno
+        tim profilom, prevod se poredi sa normom koju ni original ne poštuje.</p>
+        <p>Zato se profil izvlači iz samog ulaza, i to sa 95. percentila a ne sa
+        maksimuma — maksimum jedan izuzetan red pretvori u normu.</p>
+        <p>Izveštaj o prekoračenjima zato ne meri „probija li profil" nego
+        <strong>koliko je cue-ova teže za čitanje nego isti cue u originalu.</strong></p>
+      {% endcall %}{% else %}{% call why("Određuje koliko znakova staje u red i koliko brzo titl prolazi. <strong>Može se promeniti kasnije, bez ponovne obrade.</strong>", za="Profil") %}
+        <table>
+          <tr><th>Profil</th><th>znakova u redu</th><th>brzina čitanja</th><th>trajanje cue-a</th></tr>
+          {% for c in profile_cards %}
+            <tr><td>{{ c.name }}</td><td class="n">{{ c.max_chars }}</td>
+              <td class="n">{{ '%g'|format(c.max_cps) }}{% if loop.first %} znakova/s{% endif %}</td>
+              <td>{{ '%.2f'|format(c.min_duration)|replace('.', ',') }} –
+                  {{ '%.1f'|format(c.max_duration)|replace('.', ',') }} s</td></tr>
+          {% endfor %}
+        </table>
+        <p>„Brzina čitanja" je broj znakova u sekundi koji gledalac mora da stigne
+        da pročita. Veći broj znači gušći titl.</p>
+        <p>Promena profila ne pokreće ni
+        prepoznavanje ni prevod — titl se iznova sastavi iz sačuvanih rečenica za
+        sekundu.</p>
+      
+        <p><strong>Kako se profili razlikuju</strong> — ista rečenica iz ovog projekta po svakom profilu:</p>
+        <div class="profile-grid">
+      {% for c in profile_cards %}
+        <div class="profile-card {% if c.name == (built.profile if built else default_profile) %}on{% endif %}">
+          <h3>{{ c.name }}</h3>
+          <p class="muted small">{{ c.note }}</p>
+          <p class="small">
+            {{ c.max_chars }} znakova/red · do {{ '%g'|format(c.max_cps) }} CPS ·
+            najviše {{ c.max_lines }} reda
+          </p>
+          {% if c.lines %}
+            {# Primer je iz OVOG projekta, ne izmišljen — ista rečenica po svakom
+               profilu, pa se razlika vidi na sopstvenom tekstu. #}
+            <pre class="cue-preview">{% for line in c.lines %}{{ line }}
+{% endfor %}</pre>
+            <span class="muted small">{{ c.cues }} cue-ova za istu rečenicu</span>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+      {% endcall %}{% endif %}</span>
+      <select name="profile" id="build-profile" class="narrow" aria-label="Profil">
+        {% for c in profile_cards %}
+          <option value="{{ c.name }}" data-case="{{ c.case }}"
+            data-punct="{{ 'drop' if c.drop_punctuation else 'keep' }}"
+            {% if c.name == (built.profile if built else default_profile) %}selected{% endif %}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if active in biscriptal %}
+      <label class="f"><span>Pismo</span>
+        <select name="script" id="build-script" class="narrow" aria-label="Pismo">
+          {% for s, label in (('Latn', 'latinica'), ('Cyrl', 'ćirilica')) %}
+            <option value="{{ s }}"
+              {% if s == (built.script if built else 'Latn') %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    {% else %}
+      <input type="hidden" name="script" value="Latn" id="build-script">
+    {% endif %}
+    {% set cur_card = (profile_cards | selectattr('name', 'equalto', built.profile if built else default_profile) | first) if profile_cards else none %}
+    <label class="f"><span class="field-label">Slova{% call why(za="Slova", kratko="Menja samo izgled izlaznog titla. Broj znakova ostaje isti, ali velika slova zauzimaju oko desetinu više širine na ekranu — ako ti je red na granici profila, u VELIKIM slovima će delovati duže.") %}
+      <p><strong>Mala slova</strong> brišu velika u imenima i na početku rečenice.
+      To se ne može vratiti iz titla, ali original ostaje netaknut — vrati izbor
+      na „normalno" i preuzmi ponovo.</p>
+    {% endcall %}</span>
+      <select name="case" id="build-case" class="narrow" aria-label="Slova">
+        {% for v, label in (('normal', 'normalno'), ('upper', 'VELIKA SLOVA'), ('lower', 'mala slova')) %}
+          <option value="{{ v }}"
+            {% if v == (built.case if built else (cur_card.case if cur_card else 'normal')) %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="f"><span class="field-label">Interpunkcija{% call why(za="Interpunkcija", kratko="Izostavljena interpunkcija: nema zareza, tačaka ni navodnika — ostaju samo apostrof i crtica unutar reči (<code>c'est</code>, <code>rendez-vous</code>).") %}
+      <p>Skida se tek pri pisanju fajla, posle prelamanja: prelamanje bira rez
+      po zarezima, pa bi ih ranije skidanje odvelo na gora mesta. Zato izveštaj o
+      prekoračenjima broji red sa interpunkcijom, i poneko prijavljeno
+      prekoračenje u gotovom fajlu se ne vidi.</p>
+    {% endcall %}</span>
+      <select name="punct" id="build-punct" class="narrow" aria-label="Interpunkcija">
+        {% set drop = built.drop_punct if built else (cur_card.drop_punctuation if cur_card else false) %}
+        <option value="keep" {% if not drop %}selected{% endif %}>zadrži</option>
+        <option value="drop" {% if drop %}selected{% endif %}>izostavi</option>
+      </select>
+    </label>
+    {# Samo greška: kad uspe, promena se vidi u samom prelomu. #}
+    <span id="build-status" class="build-err" role="status"></span>
+  </form>
+
+  {# Živi red: odmah ispod trake, uvek tu. Samo ono što meniji ne pokazuju. #}
+  <p class="edwhat" id="edwhat"></p>
+
+  {% if sf %}
+
+
+
+    <div class="edtools">
+      <label><input type="checkbox" id="toggle-prev" checked> pokaži prelom</label>
+      {% if source_lang %}
+        <label><input type="checkbox" id="toggle-source" checked> prikaži original</label>
+      {% endif %}
+    </div>
+
+    <table class="cues {% if source_lang %}paired{% endif %}" id="cues">
+      <thead>
+        <tr>
+          {% if not srt_job %}<th></th>{% endif %}<th>#</th><th>vreme</th>
+          {% if source_lang %}<th class="src-col">original ({{ source_lang }})</th>{% endif %}
+          <th>{% if source_lang %}prevod ({{ active }}){% else %}tekst{% endif %}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr data-id="{{ r.id }}" data-start="{{ r.s }}" data-end="{{ r.e }}"
+            class="{% if 'low_confidence' in r.flags %}flag-low{% endif %}{% if r.over|selectattr('worse')|list %} flag-over{% endif %}{% if r.untranslated %} flag-failed{% endif %}{% if r.halluc %} flag-halluc{% endif %}">
+          {% if not srt_job %}
+          <td><button class="play" type="button" title="Pusti ovaj isečak" aria-label="Pusti">▶</button></td>
+          {% endif %}
+          <td class="num"{% if r.cues %} title="cue {{ r.cues|join(', ') }}"{% endif %}>{{ r.id }}</td>
+          <td class="tc">{{ r.s|timecode }}<br>{{ r.e|timecode }}</td>
+          {% if source_lang %}
+            {# Original se NE uređuje: ispravke se čuvaju u sentences.<lang>.json
+               otvorenog jezika, pa bi izmena ovde bila tiho izgubljena. #}
+            <td class="src-col source" lang="{{ source_lang }}">{{ r.source_html|safe }}</td>
+          {% endif %}
+          <td>
+            <div class="text" contenteditable="true" spellcheck="false">{{ r.html|safe }}</div>
+            {% include "_prev.html" %}
+            {% if r.flags %}
+              <div class="flags">
+                {% for f in r.flags %}<span class="flag">{{ f|flag_label }}</span>{% endfor %}
+              </div>
+            {% endif %}
+            {% if r.halluc %}
+              <div class="flags"><span class="flag over">izmišljeno — bez zvuka</span></div>
+              <div class="flag-note">{{ halluc_note }}</div>
+            {% endif %}
+            {% if r.untranslated and r.untranslated != 'translation_failed' %}
+              <div class="flags"><span class="flag over">liči na original ({{ r.untranslated }})</span></div>
+            {% endif %}
+            {% if r.over %}
+              <div class="flags">
+                {% for o in r.over %}<span class="flag{% if o.worse %} over{% endif %}"
+                  {% if not o.worse %}title="i original je ovde bio isto toliko dug ili brz"{% endif %}>{{ o.text }}{% if not o.worse %} — kao u originalu{% endif %}</span>{% endfor %}
+              </div>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+
+    <details class="guide" {% if not versions %}hidden{% endif %} id="versions-box">
+      <summary><span class="field-label">Verzije ({{ versions|length }}){{ why("Svako ručno snimanje pravi verziju; automatsko najviše jednu na 5 minuta. Povratak prvo snima tekuće stanje, pa i on može da se poništi.", za="Verzije") }}</span></summary>
+      <ul class="versions" id="versions">
+        {% for v in versions %}
+          <li>
+            <span class="when">{{ v.when }}</span>
+            <span class="muted small">{{ v.sentences }} rečenica · {{ v.size_kb|dec }} kB</span>
+            <button type="button" class="link" data-version="{{ v.name }}"
+                    data-when="{{ v.when }}"
+                    {% if loop.first %}title="poslednje snimljeno stanje"{% endif %}>
+              vrati{% if loop.first %} na prethodno snimljeno{% endif %}
+            </button>
+          </li>
+        {% endfor %}
+      </ul>
+    </details>
+  {% else %}
+    <p class="muted">Nema rečenica za „{{ active }}“ — transkripcija još nije gotova.</p>
+  {% endif %}
+</section>
+
+{# ---- Skraćivanje prekoračenja (projekat iz SRT-a): predlog, pregled, upis ---- #}
+{% if shorten %}
+<section class="panel" id="shorten">
+  <h3>Predlozi skraćivanja — {{ active }}</h3>
+  <p class="notice">
+    Skraćivanje je <strong>gubitak sadržaja</strong>. Ništa nije upisano — skini kvačicu gde je izbačeno nešto što nosi <span class="field-label">značenje.{{ why("Precrtano je izbačeno, podvučeno dodato. Predlozi skraćeni mnogo više nego što treba (⚠) nisu izabrani — tu se značenje najčešće gubi.", za="Predlozi skraćivanja") }}</span>
+  </p>
+  <p class="small">
+    Pokušano {{ shorten.attempted }} rečenica, prihvaćeno {{ shorten.accepted }}
+    {%- if shorten.rejected %} (odbijeno —
+      {% for razlog, n in shorten.rejected.items() %}{{ razlog }}: {{ n }}{% if not loop.last %}, {% endif %}{% endfor %}){% endif %}.
+    Iz prekoračenja izlazi {{ shorten.cues_fixed }} od {{ shorten.cues_worse_before }}
+    cue-ova gorih od originala; prosečno skraćenje {{ shorten.avg_cut }} zn.
+    ({{ '%.0f'|format(shorten.avg_cut_pct) }}%). Profil {{ shorten.profile }}.
+  </p>
+  <table class="cues shorten">
+    <thead>
+      <tr><th></th><th>cue</th><th>original</th><th>sada</th><th>predlog</th><th>skraćeno</th><th>CPS</th></tr>
+    </thead>
+    <tbody>
+    {% for it in shorten["items"] %}
+      <tr class="{% if it.status != 'accepted' %}muted{% endif %}">
+        <td>
+          {% if it.status == 'accepted' %}
+            <input type="checkbox" class="take" value="{{ it.sentence }}"
+                   {% if not it.overcut %}checked{% endif %}>
+          {% endif %}
+        </td>
+        <td class="num">{{ it.cues|join(', ') }}</td>
+        <td class="source small" lang="{{ source_lang }}">{{ it.source }}</td>
+        <td class="small">{{ it.old_html|safe }}</td>
+        <td class="small">
+          {% if it.status == 'accepted' %}{{ it.new_html|safe }}
+          {% else %}<span class="muted">{{ it.reason }}</span>
+            {% if it.new %}<br><span class="muted">{{ it.new }}</span>{% endif %}
+          {% endif %}
+        </td>
+        <td class="small">
+          {% if it.cut is defined %}−{{ it.cut }} zn.{% endif %}
+          <span class="muted">(traženo {{ it.need }})</span>
+          {% if it.overcut %}<br><span class="err" title="Model je skratio mnogo više nego što treba — tu se najčešće gubi značenje. Nije izabrano; uključi ako je u redu.">⚠ {{ '%.0f'|format(it.cut / it.need) }}× više od traženog</span>{% endif %}
+        </td>
+        <td class="small">
+          {{ '%.1f'|format(it.cps_before) }}{% if it.cps_after is defined %} → {{ '%.1f'|format(it.cps_after) }}{% endif %}
+          {% if it.cues_fixed %}<br><span class="ok">cue {{ it.cues_fixed|join(', ') }} ispod profila</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="actions left">
+    <button type="button" id="shorten-apply" class="btn sm primary">Upiši izabrane</button>
+    <button type="button" id="shorten-discard" class="link danger">odbaci ceo predlog</button>
+    <span id="shorten-state" class="muted small"></span>
+  </div>
+</section>
+{% endif %}
+
+{# ---- 4. Za preuzimanje ---- #}
+{% include "_downloads.html" %}
+
+{# ---- 5. Prevod ---- #}
+<section class="panel">
+  <h3>Prevod</h3>
+  {% if job.status in ('uploaded', 'transcribing') %}
+    <p class="muted">Prevod se otključava kad transkripcija završi.</p>
+  {% else %}
+    <form method="post" action="/jobs/{{ job.id }}/translate" class="edbar" style="border-bottom:0; padding-top:0">
+      <label class="f"><span class="field-label">Na jezik{% call why(za="Prevod") %}<p>Prevodi se <strong>rečenica sa kontekstom</strong>, ne cue po cue.</p>
+      <p>Cue je proizvoljan isečak rečenice. Preveden izolovano, gubi rod, padež
+      i vezu sa onim što mu prethodi. Zato se prevode cele rečenice, sa po dve
+      rečenice konteksta sa svake strane, pa se prelamanje radi iznova — po
+      pravilima ciljnog jezika.</p>
+      <p>Prvo isprati prepis, pa onda prevodi. Ispravka posle prevoda znači
+      ispravku u dva fajla.</p>
+    
+    <p>Prevod se <strong>ne pokreće sam.</strong></p>
+      <p>Prevod se pokreće dugmetom tek kad ispraviš prepis. Razlog je praktičan:
+      ako prevedeš neispravljen tekst, prevedu se i greške, pa onda ispravljaš dva
+      fajla umesto jednog.</p>
+      <p>Izbor pisma (latinica / ćirilica) pojavljuje se samo kod jezika koji
+      imaju oba. Interno se uvek radi latinicom, a ćirilica se dobija na samom
+      kraju.</p>{% endcall %}</span>
+        <select name="to" id="tgt-lang"
+                data-biscriptal="{{ biscriptal | join(' ') }}">
+          {% for code, name in target_langs %}
+          <option value="{{ code }}"
+            {% if code == default_target %}selected{% endif %}>{{ name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      {# Pismo se bira samo za dvopismene jezike; za ostale ga i backend odbija. #}
+      <label class="f" id="tgt-script" hidden><span>Pismo</span>
+        <select name="script">
+          <option value="Latn">latinica</option>
+          <option value="Cyrl">ćirilica</option>
+        </select>
+      </label>
+      {# Veličina slova važi za svaki jezik, pa se, za razliku od pisma, ne krije. #}
+      <label class="f"><span>Slova</span>
+        <select name="case">
+          <option value="normal" selected>normalno</option>
+          <option value="upper">VELIKA SLOVA</option>
+          <option value="lower">mala slova</option>
+        </select>
+      </label>
+      <label class="f"><span>Interpunkcija</span>
+        <select name="punct">
+          <option value="keep" selected>zadrži</option>
+          <option value="drop">izostavi</option>
+        </select>
+      </label>
+      {# U boji: pokreće model na nekoliko minuta. #}
+      <button type="submit" class="btn sm primary" {% if pending %}disabled{% endif %}>Prevedi</button>
+      <span class="spacer"></span>
+    </form>
+    <p class="note">Prvo ispravi prepis. Prevod neispravljenog teksta prevodi i greške.</p>
+  {% endif %}
+</section>
+
+{# ---- 6. Izveštaj o obradi ---- #}
+<section class="panel">
+  <h3>Izveštaj o obradi</h3>
+  {% if summary %}
+    <div class="report">
+      <div>
+        {% for st in summary.steps %}
+          <div class="phase ok" title="{{ st.hint }}"><span class="mk">✓</span><span class="t">{{ st.label }}</span>
+            <span class="d">{{ ('%.1f'|format(st.duration_s))|replace('.', ',') }} s</span></div>
+        {% endfor %}
+        <div class="phase"><span class="mk">Σ</span><span class="t">ukupno</span>
+          <span class="d">{{ '%.0f'|format(summary.total_s) }} s</span></div>
+      </div>
+      <dl>
+        {% if summary.coverage_pct is defined and summary.coverage_pct is not none %}
+          <div class="kv"><dt><span class="field-label">pokrivenost{% call why("Udeo trajanja snimka pokriven prepoznatim govorom.", za="Pokrivenost") %}
+            <p>Ovo nije ocena kvaliteta. Svaki snimak sadrži i tišinu, pauze i
+            disanje, pa 100% nije ni moguće — najveća vrednost ikad izmerena na
+            ovom alatu je 88,9%.</p>
+            <p>Vredi pogledati ako je <strong>ispod 80%</strong>, i to tako što
+            proveriš praznine izlistane ispod: ako se u nekoj od njih stvarno
+            govori, ponovi prepoznavanje sa drugim podešavanjem filtera tišine.</p>{% endcall %}</span></dt><dd>{{ summary.coverage_pct|dec }}%</dd></div>
+        {% endif %}
+        {% if summary.words %}<div class="kv"><dt>reči</dt><dd>{{ summary.words }}</dd></div>{% endif %}
+        {% if summary.sentences %}<div class="kv"><dt>rečenice</dt><dd>{{ summary.sentences }}{% if summary.low_confidence %} · {{ summary.low_confidence }} nesigurnih{% endif %}</dd></div>{% endif %}
+        {% if summary.gaps is defined %}<div class="kv"><dt>praznine preko 3 s</dt><dd>{{ summary.gaps|length }}</dd></div>{% endif %}
+        {% if summary.model %}
+          <div class="kv"><dt>filter tišine</dt><dd>{{ 'uključen' if summary.vad else 'isključen' }}</dd></div>
+          {% if summary.nonspeech_pct is defined %}<div class="kv"><dt>udeo negovora</dt><dd>{{ summary.nonspeech_pct|dec }}%</dd></div>{% endif %}
+          <div class="kv"><dt>model</dt><dd>{{ summary.model }}</dd></div>
+        {% endif %}
+        {% if not srt_job %}
+          {% set gi = glossary_info %}
+          <div class="kv"><dt>glosar</dt><dd>{{ gi.asr_terms|length }} termina u prepoznavanju</dd></div>
+        {% endif %}
+        {% if summary.srt %}
+          {% set t = summary.srt %}
+          <div class="kv"><dt>ulazni SRT</dt><dd>{{ t.cues }} cue-ova → {{ t.sentences }} rečenica</dd></div>
+        {% endif %}
+        {% if summary.elisions %}<div class="kv"><dt>elizija</dt><dd>{{ summary.elisions }} spajanja</dd></div>{% endif %}
+        {% if not summary.srt %}
+          <div class="kv"><dt>interpunkcija</dt><dd>
+            {% if summary.punctuation %}{{ summary.punctuation.marks_added }} znakova{% else %}nije pokretana{% endif %}</dd></div>
+        {% endif %}
+        <div class="kv"><dt>verzije prepisa</dt><dd>{{ versions|length if versions else 'nema' }}</dd></div>
+      </dl>
+    </div>
+
+    {% if summary.gaps %}
+      <p class="note"><span class="field-label">praznine duže od 3 s{{ why("Preslušaj ova mesta u snimku. Ako se tu govori, nešto je izgubljeno.", za="Praznine") }}</span></p>
+      <ul class="gaps muted">
+        {% for g in summary.gaps %}
+          <li>{{ g.s|timecode }} – {{ g.e|timecode }} ({{ g.len|dec }} s)</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+    {% if summary.srt %}
+      {% set t = summary.srt %}
+      <p class="note">
+        {{ t.multi_cue }} rečenica preko više cue-ova · {{ t.shared_cues }} cue-ova sa više rečenica ·
+        {{ t.encoding }}{% if t.original_script and t.original_script != 'Latn' %} · pismo {{ t.original_script }}{% endif %}
+        {%- if t.forced_breaks %} · <span class="err">{{ t.forced_breaks }} presečenih bez tačke</span>{% endif %}
+      </p>
+    {% endif %}
+    {% if summary.punctuation %}
+      {% set p = summary.punctuation %}
+      <p class="note">interpunkcija:
+        {{ p.model }} · {{ p.chunks_ok }}/{{ p.chunks_ok + p.chunks_failed }} čankova ·
+        {{ p.seconds_total|dec }} s{% if p.seconds_wasted %} ({{ p.seconds_wasted|dec }} s bačeno){% endif %}
+        {%- if p.failed_ranges %} · {{ p.failed_ranges }} opseg(a) bez interpunkcije{% endif %}
+        {%- if p.concessions %} · ustupci:
+          {% for k, n in p.concessions.items() %}{{ k }} {{ n }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
+      </p>
+    {% endif %}
+    {% if not srt_job %}
+      {% set gi = glossary_info %}
+      <p class="note">glosar:
+        {% if not gi.own -%}podrazumevani — projekat je stariji od glosara po projektu
+        {% elif not gi.asr_terms %}prazan glosar
+        {% else %}glosar projekta{% if gi.recording_terms %}, od toga {{ gi.recording_terms|length }} iz ovog snimka{% endif %}{% endif %}
+        {%- if gi.asr_terms %} · <span class="field-label">termini{% call why(za="Termini u prepoznavanju") %}<p>{{ gi.asr_terms|join(' · ') }}</p>{% endcall %}</span>{% endif %}
+      </p>
+    {% endif %}
+  {% else %}
+    <p class="muted">Obrada još nije završila nijednu fazu.</p>
+  {% endif %}
+
+  {% if not srt_job %}
+    {% if not (sf and sf.edited_by_human) %}
+    <details class="guide retr" id="ponovi">
+      <summary>Ponovi prepoznavanje</summary>
+      <form method="post" action="/jobs/{{ job.id }}/retranscribe" id="retranscribe"
+            data-confirm-title="Ponoviti prepoznavanje?"
+            data-confirm-body="Trenutni prepis se zamenjuje novim."
+            data-confirm-ok="Pokreni ponovo">
+        <div class="edbar" style="border-bottom:0">
+          <label class="f"><span class="field-label">Filter tišine{% call why(za="Filter tišine", kratko="Filter tišine uklanja delove bez govora pre prepoznavanja. <strong>Podrazumevano je isključen — tako je bolje.</strong>") %}
+      <p>Očekivalo bi se da filtriranje tišine pomaže. Mereno na istom tihom snimku:</p>
+      <table>
+        <tr><th></th><th>reči</th><th>pokrivenost</th></tr>
+        <tr><td>isključeno</td><td class="n"><strong>189</strong></td><td class="n"><strong>88,9%</strong></td></tr>
+        <tr><td>normalno (0,35)</td><td class="n">179</td><td class="n">85,6%</td></tr>
+        <tr><td>tih snimak (0,20)</td><td class="n">180</td><td class="n">87,9%</td></tr>
+      </table>
+      <p>Razlog: na tihom snimku filter seče i delove govora koje model inače
+      uspe da rekonstruiše iz konteksta. Tekst je sa isključenim filterom bio i
+      tačniji („Delikates burger" umesto „deli kates burdžer").</p>
+      <p>Uključi ga kad snimak ima mnogo muzike, džingla ili tišine — tamo model
+      ume da izmisli tekst. Udeo negovora je u izveštaju iznad.</p>
+      <p>{% for value, label, hint in vad_presets %}<strong>{{ label }}</strong> — {{ hint }}{% if not loop.last %}<br>{% endif %}{% endfor %}</p>
+    {% endcall %}</span>
+            <select name="vad_preset" class="narrow">
+              {% for value, label, hint in vad_presets %}
+                <option value="{{ value }}" title="{{ hint }}"
+                  {% if (summary and summary.vad and value == 'normalno') or ((not summary or not summary.vad) and value == 'iskljuceno') %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        <label class="terms"><span class="field-label">Termini iz ovog snimka{{ why("Imena i reči koje se izgovaraju u snimku. Ulaze u prepoznavanje govora ovog projekta.", za="Termini iz ovog snimka") }}</span>
+          <textarea name="terms" rows="3" placeholder="jedan po redu, npr.&#10;Valjevo&#10;Mileva">{{ recording_terms|join('\n') }}</textarea>
+        </label>
+        <div class="actions left" style="margin-top:10px">
+          <button type="submit" class="btn sm ghost" {% if pending %}disabled{% endif %}>Pokreni ponovo</button>
+        </div>
+      </form>
+    </details>
+    {% endif %}
+  {% endif %}
+
+  <details class="guide" id="dnevnik">
+    <summary>Dnevnik</summary>
+    <pre id="log">{% for e in events %}{{ e.ts }}  {{ e.kind }}  {{ e.message }}
+{% endfor %}</pre>
+  </details>
+</section>
+
+<audio id="player"></audio>
+
+<script>
+const JOB = {{ job.id|tojson }};
+// Imena faza za traku napretka — ista kao u listi „Šta je urađeno".
+const PHASE_LABELS = {{ phase_labels|tojson }};
+const LANG = {{ active|tojson }};
+// Alt+N/P skače po redovima koje vredi pogledati: nesigurne reči, ili — kod
+// posla iz SRT-a — cue-ovi preko profila.
+const FLAGGED = {{ ("#cues tr.flag-over, #cues tr.flag-failed" if srt_job
+                    else "#cues tr.flag-halluc, #cues tr.flag-low, #cues tr.flag-failed")|tojson }};
+let lastEventId = {{ last_event_id }};
+const STATUS_PILLS = {{ status_pills|tojson }};
+
+// --- Živi red ispod trake: oblik reda za izabrani profil ---
+const CARDS = {{ profile_cards|tojson }};
+const edwhat = document.getElementById("edwhat");
+function num(x, d) { return Number(x).toFixed(d).replace(".", ","); }
+// „znak" se slaže sa brojem: 2–4 (osim 12–14) -> znaka, ostalo -> znakova
+function znakova(n) {
+  const d = n % 10, dd = n % 100;
+  return d >= 2 && d <= 4 && !(dd >= 12 && dd <= 14) ? "znaka" : "znakova";
+}
+const BROJ_REDOVA = {2: "Dva", 3: "Tri", 4: "Četiri"};
+function renderWhat() {
+  // Pismo, slova i interpunkcija već stoje u svojim menijima, a brzina i
+  // trajanje u ikonici uz Profil — ovde samo oblik reda (krug 13).
+  if (!edwhat) return;
+  const prof = document.getElementById("build-profile");
+  const c = CARDS.find(x => x.name === prof.value);
+  if (!c) { edwhat.textContent = ""; return; }
+  if (c.max_lines > 1) {
+    edwhat.textContent = `${BROJ_REDOVA[c.max_lines] || c.max_lines} reda po najviše ${c.max_chars} ${znakova(c.max_chars)}.`;
+  } else if (c.min_chars) {
+    edwhat.textContent = `Jedan red od ${c.min_chars} do ${c.max_chars} ${znakova(c.max_chars)}.`;
+  } else {
+    edwhat.textContent = `Jedan red do ${c.max_chars} ${znakova(c.max_chars)}.`;
+  }
+}
+// Izbor profila POSTAVLJA veličinu slova i interpunkciju (npr. `digital`:
+// VELIKA, bez interpunkcije); posle se oba menjaju ručno — ne zaključava.
+const buildProfile = document.getElementById("build-profile");
+if (buildProfile) {
+  buildProfile.addEventListener("change", (e) => {
+    const opt = e.target.selectedOptions[0];
+    document.getElementById("build-case").value = opt.dataset.case || "normal";
+    document.getElementById("build-punct").value = opt.dataset.punct || "keep";
+    renderWhat();
+  });
+  ["build-script", "build-case", "build-punct"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("change", renderWhat);
+  });
+  renderWhat();
+}
+
+// --- slušanje isečka uz svaki red ---
+const player = document.getElementById("player");
+document.querySelectorAll("tr[data-id] .play").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const tr = btn.closest("tr");
+    const s = tr.dataset.start, e = tr.dataset.end;
+    document.querySelectorAll("tr.playing").forEach(x => x.classList.remove("playing"));
+    tr.classList.add("playing");
+    player.src = `/jobs/${encodeURIComponent(JOB)}/clip?start=${s}&end=${e}`;
+    player.play().catch(err => setState("audio: " + err.message, true));
+  });
+});
+player.addEventListener("ended", () => {
+  document.querySelectorAll("tr.playing").forEach(x => x.classList.remove("playing"));
+});
+
+// --- snimanje ispravki ---
+const AUTOSAVE_MS = {{ autosave_seconds }} * 1000;
+const UNDO_LIMIT = 20;
+
+const saveBtn = document.getElementById("save");
+const undoBtn = document.getElementById("undo");
+const saveState = document.getElementById("save-state");
+const capEl = document.getElementById("undo-cap");
+if (capEl) capEl.textContent = UNDO_LIMIT + " izmena";  // spisak prečica je u „Kako ovo radi"
+
+function setState(msg, bad) {
+  if (!saveState) return;
+  saveState.textContent = msg;
+  saveState.className = "small " + (bad ? "err" : "muted");
+}
+
+// Disketa uz „Snimi izmene": prigušena kad je sve snimljeno, u boji kad
+// ima nesnimljenog, trepne dok snimanje traje (krug 13).
+const saveIcon = document.getElementById("save-icon");
+const DISK_TITLES = {
+  clean: "sve izmene su sačuvane", dirty: "ima izmena koje nisu sačuvane", saving: "snimam…",
+};
+function setDisk(state) {
+  if (!saveIcon) return;
+  saveIcon.className = "disk " + state;
+  saveIcon.title = DISK_TITLES[state];
+  saveIcon.setAttribute("aria-label", DISK_TITLES[state]);
+}
+
+function collect() {
+  const out = [];
+  document.querySelectorAll("#cues tr[data-id]").forEach(tr => {
+    const text = tr.querySelector(".text").innerText.replace(/\s+/g, " ").trim();
+    out.push({ id: Number(tr.dataset.id), text });
+  });
+  return out;
+}
+
+// ---- poništavanje ----
+//
+// Sopstveni stek umesto ugrađenog undo-a: ugrađeni radi po elementu, pa
+// Ctrl+Z posle prelaska u drugi red vraća pogrešnu izmenu. Ovde je jedinica
+// izmene RED, a snima se stanje PRE promene.
+const undoStack = [];
+const lastText = new Map();   // id -> poslednje viđeno stanje
+
+document.querySelectorAll("#cues tr[data-id]").forEach(tr => {
+  lastText.set(tr.dataset.id, tr.querySelector(".text").innerText);
+});
+
+function refreshUndo() {
+  if (undoBtn) undoBtn.disabled = undoStack.length === 0;
+}
+
+function pushUndo(id, before) {
+  const top = undoStack[undoStack.length - 1];
+  // Kucanje u istom redu bez prekida je JEDNA izmena — inače bi Ctrl+Z
+  // vraćao slovo po slovo.
+  if (top && top.id === id && Date.now() - top.at < 1200) {
+    top.at = Date.now();
+    return;
+  }
+  undoStack.push({ id, before, at: Date.now() });
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  refreshUndo();
+}
+
+function undo() {
+  const step = undoStack.pop();
+  refreshUndo();
+  if (!step) { setState("nema šta da se poništi"); return; }
+  const tr = document.querySelector(`#cues tr[data-id="${step.id}"]`);
+  if (!tr) return;
+  const cell = tr.querySelector(".text");
+  cell.innerText = step.before;
+  lastText.set(step.id, step.before);
+  cell.focus();
+  dirty = true;
+  setState(`poništeno (rečenica ${step.id}); ostalo ${undoStack.length}`);
+}
+
+let dirty = false;
+document.querySelectorAll("#cues .text").forEach(cell => {
+  const tr = cell.closest("tr");
+  const id = tr.dataset.id;
+  cell.addEventListener("beforeinput", () => {
+    pushUndo(id, lastText.get(id));
+  });
+  cell.addEventListener("input", () => {
+    lastText.set(id, cell.innerText);
+    dirty = true;
+    setDisk("dirty");
+    setState("");
+  });
+});
+
+// ---- snimanje ----
+let saving = false;
+
+// Snimanje koje stigne dok drugo traje ne sme da se izgubi: izvršava se
+// odmah posle njega (spoj zahteva — ručno ima prednost nad automatskim).
+let queuedSave = null;
+
+async function save({ auto = false, rebuild = false } = {}) {
+  if (saving) {
+    queuedSave = {
+      auto: queuedSave ? queuedSave.auto && auto : auto,
+      rebuild: rebuild || !!(queuedSave && queuedSave.rebuild),
+    };
+    return null;
+  }
+  saving = true;
+  setDisk("saving");
+  try {
+    const res = await fetch(`/jobs/${encodeURIComponent(JOB)}/sentences`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lang: LANG, sentences: collect(), autosave: auto }),
+    });
+    if (!res.ok) {
+      let msg = res.statusText;
+      try { msg = (await res.json()).detail || msg; } catch (e) { /* nije JSON */ }
+      setState("greška: " + msg, true);
+      setDisk("dirty");
+      return null;
+    }
+    const data = await res.json();
+    dirty = false;
+    setDisk("clean");
+    const kada = new Date().toLocaleTimeString();
+    if (auto) {
+      setState(data.changed
+        ? `snimljeno automatski u ${kada}` + (data.skipped_empty
+            ? ` (${data.skipped_empty} praznih preskočeno)` : "")
+        : `bez izmena, provereno u ${kada}`);
+    } else {
+      // Snimi izmene = snimi tekst I prelomi, jednim klikom, bez osvežavanja
+      // strane: prelom ispod rečenica stiže iz /rebuild (krug 13).
+      setState(data.changed ? `snimljeno u ${kada}` : "nema izmena");
+    }
+    // Ručno snimanje i izlazak iz izmenjenog polja prelamaju; periodično
+    // automatsko ne (ono čuva tekst, ne pravi titl usred kucanja).
+    if (!auto || rebuild) rebuildNow();
+    return data;
+  } catch (err) {
+    setState("greška: " + err.message, true);
+    setDisk("dirty");
+    return null;
+  } finally {
+    saving = false;
+    if (queuedSave) { const q = queuedSave; queuedSave = null; save(q); }
+  }
+}
+
+if (saveBtn) saveBtn.addEventListener("click", () => save());
+if (undoBtn) undoBtn.addEventListener("click", undo);
+refreshUndo();
+
+// Automatsko snimanje: zatvaranje kartice usred korekture ne sme da pojede rad.
+setInterval(() => { if (dirty) save({ auto: true }); }, AUTOSAVE_MS);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden" && dirty) save({ auto: true });
+});
+window.addEventListener("beforeunload", (e) => {
+  if (!dirty) return;
+  // `sendBeacon` stiže i kad se kartica zatvara — `fetch` u tom trenutku ne.
+  navigator.sendBeacon(
+    `/jobs/${encodeURIComponent(JOB)}/sentences`,
+    new Blob([JSON.stringify({ lang: LANG, sentences: collect(), autosave: true })],
+             { type: "application/json" })
+  );
+  e.preventDefault();
+  e.returnValue = "";
+});
+
+// ---- tastatura ----
+//
+// Pri korekturi je prebacivanje na miš najsporije, pa sve ima prečicu.
+const cells = [...document.querySelectorAll("#cues .text")];
+
+function currentRow() {
+  const active = document.activeElement;
+  const inCell = active && active.closest ? active.closest("tr[data-id]") : null;
+  return inCell || document.querySelector("#cues tr.current") ||
+         document.querySelector("#cues tr[data-id]");
+}
+
+function markCurrent(tr) {
+  document.querySelectorAll("#cues tr.current").forEach(x => x.classList.remove("current"));
+  if (tr) tr.classList.add("current");
+}
+
+function focusCell(index) {
+  if (index < 0 || index >= cells.length) return;
+  const cell = cells[index];
+  cell.focus();
+  markCurrent(cell.closest("tr"));
+  cell.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
+function playRow(tr) {
+  if (!tr) return;
+  const btn = tr.querySelector(".play");
+  if (btn) btn.click();
+}
+
+function jumpFlagged(step) {
+  const flagged = [...document.querySelectorAll(FLAGGED)];
+  if (!flagged.length) { setState("nema označenih rečenica"); return; }
+  const here = currentRow();
+  const pos = flagged.indexOf(here);
+  let next;
+  if (pos === -1) {
+    // Nismo na označenom redu — nađi prvi u zadatom smeru od tekućeg.
+    const all = [...document.querySelectorAll("#cues tr[data-id]")];
+    const at = all.indexOf(here);
+    next = step > 0
+      ? flagged.find(tr => all.indexOf(tr) > at)
+      : [...flagged].reverse().find(tr => all.indexOf(tr) < at);
+  } else {
+    next = flagged[pos + step];
+  }
+  if (!next) { setState(step > 0 ? "nema više označenih" : "nema ranijih označenih"); return; }
+  const cell = next.querySelector(".text");
+  focusCell(cells.indexOf(cell));
+  setState(`rečenica ${next.dataset.id} — ${flagged.indexOf(next) + 1}/${flagged.length} označenih`);
+}
+
+document.addEventListener("keydown", (ev) => {
+  const inText = ev.target.classList && ev.target.classList.contains("text");
+
+  if (ev.ctrlKey && !ev.shiftKey && !ev.altKey && ev.key.toLowerCase() === "s") {
+    ev.preventDefault();
+    save();
+    return;
+  }
+  if (ev.ctrlKey && !ev.shiftKey && ev.key.toLowerCase() === "z") {
+    ev.preventDefault();  // ugrađeni undo bi radio po elementu, ne po redu
+    undo();
+    return;
+  }
+  if (ev.altKey && ev.key.toLowerCase() === "n") { ev.preventDefault(); jumpFlagged(1); return; }
+  if (ev.altKey && ev.key.toLowerCase() === "p") { ev.preventDefault(); jumpFlagged(-1); return; }
+
+  if (ev.key === " " && (ev.ctrlKey || !inText)) {
+    // U tekstu razmaknica mora da kuca razmak — tamo ide Ctrl+Space.
+    ev.preventDefault();
+    playRow(currentRow());
+    return;
+  }
+
+  if (ev.key === "Tab" && inText) {
+    const idx = cells.indexOf(ev.target);
+    if (idx !== -1) {
+      ev.preventDefault();
+      focusCell(idx + (ev.shiftKey ? -1 : 1));
+    }
+  }
+});
+
+cells.forEach(cell => {
+  cell.addEventListener("focus", () => {
+    markCurrent(cell.closest("tr"));
+    cell.dataset.before = cell.innerText;
+  });
+  // Izlazak iz polja sa izmenjenim tekstom: snimi (kao automatsko — kopija
+  // najviše jednom na 5 minuta) i prelomi ceo titl, jer se brojevi cue-ova
+  // posle ove rečenice pomeraju (krug 14). „Snimi izmene" ostaje za odmah.
+  cell.addEventListener("blur", () => {
+    if (cell.dataset.before !== undefined && cell.innerText !== cell.dataset.before) {
+      cell.dataset.before = cell.innerText;
+      save({ auto: true, rebuild: true });
+    }
+  });
+});
+
+function rebuildNow() {
+  const bf = document.getElementById("build-form");
+  if (bf && window.htmx) htmx.trigger(bf, "rebuild");
+}
+document.querySelectorAll("#cues tr[data-id]").forEach(tr => {
+  tr.addEventListener("click", () => markCurrent(tr));
+});
+
+// ---- verzije ----
+const versionsBox = document.getElementById("versions");
+if (versionsBox) {
+  versionsBox.addEventListener("click", async (ev) => {
+    const btn = ev.target.closest("button[data-version]");
+    if (!btn) return;
+    const kada = btn.dataset.when;
+    if (!await askConfirm({ title: `Vratiti na verziju od ${kada}?`,
+        body: "Tekuće stanje se prvo snima kao nova verzija, pa i ovo može da se poništi.",
+        ok: "Vrati verziju" })) return;
+    btn.disabled = true;
+    try {
+      const res = await fetch(`/jobs/${encodeURIComponent(JOB)}/restore`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lang: LANG, name: btn.dataset.version }),
+      });
+      if (!res.ok) {
+        let msg = res.statusText;
+        try { msg = (await res.json()).detail || msg; } catch (e) { /* nije JSON */ }
+        setState("greška: " + msg, true);
+        btn.disabled = false;
+        return;
+      }
+      dirty = false;
+      setState("vraćeno; osvežavam…");
+      setTimeout(() => location.reload(), 800);
+    } catch (err) {
+      setState("greška: " + err.message, true);
+      btn.disabled = false;
+    }
+  });
+}
+
+// --- Prelom ispod rečenice: prekidač „pokaži prelom", izbor se pamti ---
+const togglePrev = document.getElementById("toggle-prev");
+if (togglePrev) {
+  try { togglePrev.checked = localStorage.getItem("pokazi-prelom") !== "ne"; } catch (e) { /* bez skladišta: uključeno */ }
+  const syncPrev = () => {
+    document.getElementById("cues").classList.toggle("no-prev", !togglePrev.checked);
+    try { localStorage.setItem("pokazi-prelom", togglePrev.checked ? "da" : "ne"); } catch (e) { /* nije bitno */ }
+  };
+  togglePrev.addEventListener("change", syncPrev);
+  syncPrev();
+}
+
+{% if source_lang %}
+// --- Sakrivanje kolone sa originalom (za uske ekrane) ---
+const toggleSource = document.getElementById("toggle-source");
+if (toggleSource) {
+  const sync = () => {
+    document.querySelectorAll("#cues .src-col").forEach(el => {
+      el.hidden = !toggleSource.checked;
+    });
+  };
+  toggleSource.addEventListener("change", sync);
+  sync();
+}
+{% endif %}
+
+// --- Izbor pisma: samo za dvopismene ciljne jezike ---
+const tgtLang = document.getElementById("tgt-lang");
+const tgtScript = document.getElementById("tgt-script");
+if (tgtLang && tgtScript) {
+  const biscriptal = (tgtLang.dataset.biscriptal || "").split(" ").filter(Boolean);
+  const syncScript = () => {
+    const on = biscriptal.includes(tgtLang.value);
+    tgtScript.hidden = !on;
+    // Skriveno polje se i dalje šalje; vraćanje na Latn sprečava da izbor
+    // ćirilice ostane zakačen kad se ciljni jezik promeni na francuski.
+    if (!on) tgtScript.querySelector("select").value = "Latn";
+  };
+  tgtLang.addEventListener("change", syncScript);
+  syncScript();
+}
+
+// --- Predlozi skraćivanja ---
+async function shortenPost(path, body) {
+  const st = document.getElementById("shorten-state");
+  const res = await fetch(`/jobs/${encodeURIComponent(JOB)}/${path}`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let msg = res.statusText;
+    try { msg = (await res.json()).detail || msg; } catch (e) { /* nije JSON */ }
+    st.textContent = "greška: " + msg; st.className = "small err";
+    return null;
+  }
+  return res.json();
+}
+const shortenApply = document.getElementById("shorten-apply");
+if (shortenApply) {
+  shortenApply.addEventListener("click", async () => {
+    const ids = [...document.querySelectorAll("#shorten .take:checked")].map(x => Number(x.value));
+    const all = document.querySelectorAll("#shorten .take").length;
+    if (!await askConfirm({ title: `Upisati ${ids.length} od ${all} skraćenih verzija?`,
+        body: "Ostali predlozi se odbacuju. Pre upisa se pravi verzija, pa se i ovo može vratiti.",
+        ok: "Upiši izabrane" })) return;
+    const data = await shortenPost("shorten/apply", { lang: LANG, ids });
+    if (data) setTimeout(() => location.reload(), 500);
+  });
+  document.getElementById("shorten-discard").addEventListener("click", async () => {
+    if (!await askConfirm({ title: "Odbaciti ceo predlog skraćivanja?",
+        body: "Prevod ostaje kakav je.", ok: "Odbaci predlog", danger: true })) return;
+    const data = await shortenPost("shorten/discard", { lang: LANG });
+    if (data) location.reload();
+  });
+}
+
+// --- SSE progres ---
+const bar = document.getElementById("bar");
+const label = document.getElementById("progress-label");
+const logEl = document.getElementById("log");
+const es = new EventSource(`/jobs/${encodeURIComponent(JOB)}/events?last_id=${lastEventId}`);
+function append(e) {
+  const d = JSON.parse(e.data);
+  logEl.textContent += `${d.ts}  ${d.kind}  ${d.message}\n`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+es.addEventListener("log", append);
+es.addEventListener("error", append);
+es.addEventListener("progress", e => {
+  const d = JSON.parse(e.data);
+  const pct = Math.round((d.progress || 0) * 100);
+  bar.style.width = pct + "%";
+  label.textContent = `${PHASE_LABELS[d.message] || d.message}: ${pct}%`;
+});
+es.addEventListener("status", e => {
+  const d = JSON.parse(e.data);
+  const pill = document.getElementById("job-status");
+  const [text, cls] = STATUS_PILLS[d.message] || [d.message, ""];
+  pill.textContent = text;
+  pill.className = "pill " + cls;
+});
+es.addEventListener("done", () => setTimeout(() => location.reload(), 800));
+</script>
+{% endblock %}

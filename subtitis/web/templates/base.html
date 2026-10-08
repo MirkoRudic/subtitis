@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="sr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Subtitis{% endblock %}</title>
+  {# Fontovi su lokalni, kao i htmx: alat ne šalje ništa van ovog računara. #}
+  <link rel="stylesheet" href="/static/fonts.css">
+  <link rel="icon" href="/favicon.ico?v={{ version }}" type="image/x-icon">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" title="baza projekata"><i>▌</i> SUBTITIS</a>
+    <span class="tagline">aplikacija za transkripciju i prevod</span>
+    <nav>
+      <a href="/settings" class="gear" title="podešavanja" aria-label="podešavanja">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </a>
+      {# Prva muka sa dashboardom: upload prođe, ništa se ne dešava, nigde ne
+         piše zašto. Otkucaj workera je jedini način da se to vidi. #}
+      <span class="worker worker-state" hx-get="/worker/status"
+            hx-trigger="load, every 3s" hx-swap="innerHTML"></span>
+    </nav>
+  </header>
+  <main class="wrap">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="sign">
+    Mirko + Claude · v{{ version }} · <a href="/kako">kako ovo radi</a>
+  </footer>
+  <script>
+  // ===================================================================
+  // Zajedničko za sve strane (krug 12).
+  // ===================================================================
+
+  // --- Objašnjenja: jedan prozorčić za sve ikonice (_help.html) -------
+  // Lebdi iznad sadržaja i ništa ne pomera; zatvara se klikom van,
+  // ponovnim klikom na ikonicu i Esc; otvoren je najviše jedan.
+  const pop = document.createElement("div");
+  pop.className = "pop"; pop.setAttribute("role", "dialog"); pop.hidden = true;
+  document.body.appendChild(pop);
+  let popFor = null;
+  function closePop() {
+    if (popFor) popFor.setAttribute("aria-expanded", "false");
+    pop.hidden = true; popFor = null;
+  }
+  function openPop(icon) {
+    closePop();
+    const tpl = icon.querySelector("template");
+    pop.innerHTML = tpl ? tpl.innerHTML : "";
+    pop.setAttribute("aria-label", icon.getAttribute("aria-label") || "objašnjenje");
+    pop.hidden = false;
+    const r = icon.getBoundingClientRect();
+    const w = pop.offsetWidth;
+    const left = Math.max(8, Math.min(r.left, document.documentElement.clientWidth - w - 8));
+    pop.style.left = (left + window.scrollX) + "px";
+    pop.style.top = (r.bottom + window.scrollY + 6) + "px";
+    icon.setAttribute("aria-expanded", "true");
+    popFor = icon;
+  }
+  function onInfo(e) {
+    const icon = e.target.closest(".info");
+    if (!icon) return false;
+    // ikonica stoji u <label>; bez ovoga bi klik otvorio i padajući meni
+    e.preventDefault(); e.stopPropagation();
+    if (popFor === icon) closePop(); else openPop(icon);
+    return true;
+  }
+  document.addEventListener("click", (e) => {
+    if (onInfo(e)) return;
+    if (popFor && !pop.contains(e.target)) closePop();
+  }, true);
+  document.addEventListener("keydown", (e) => {
+    if ((e.key === "Enter" || e.key === " ") && e.target.classList && e.target.classList.contains("info")) {
+      onInfo(e);
+    }
+  });
+  window.addEventListener("resize", closePop);
+
+  // --- Potvrde: naš prozor, ne pregledačev prozor za potvrdu ------------
+  // Dugme kaže šta radi; odustajanje prvo i mirno; Esc i klik van = odustani.
+  function askConfirm({ title, body = "", ok = "Potvrdi", danger = false }) {
+    return new Promise((resolve) => {
+      const back = document.createElement("div");
+      back.className = "modal-back";
+      back.innerHTML = `<div class="modal" role="alertdialog" aria-modal="true">
+          <h2></h2><p></p>
+          <div class="actions left"><button type="button" class="btn sm ghost" data-a="no">Odustani</button>
+          <button type="button" class="btn sm ${danger ? "danger" : "primary"}" data-a="yes"></button></div></div>`;
+      back.querySelector("h2").textContent = title;
+      back.querySelector("p").textContent = body;
+      back.querySelector('[data-a="yes"]').textContent = ok;
+      const done = (v) => { back.remove(); document.removeEventListener("keydown", esc, true); resolve(v); };
+      const esc = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); done(false); } };
+      back.addEventListener("click", (e) => {
+        if (e.target === back) return done(false);
+        const a = e.target.closest("[data-a]");
+        if (a) done(a.dataset.a === "yes");
+      });
+      document.addEventListener("keydown", esc, true);
+      document.body.appendChild(back);
+      back.querySelector('[data-a="no"]').focus();
+    });
+  }
+  window.askConfirm = askConfirm;
+  // Forma sa `data-confirm-title` se šalje tek posle potvrde u našem prozoru.
+  document.addEventListener("submit", async (e) => {
+    const f = e.target;
+    if (!f.dataset || !f.dataset.confirmTitle || f.dataset.confirmed) return;
+    e.preventDefault();
+    const yes = await askConfirm({
+      title: f.dataset.confirmTitle, body: f.dataset.confirmBody || "",
+      ok: f.dataset.confirmOk || "Potvrdi", danger: f.dataset.confirmDanger === "true",
+    });
+    if (yes) { f.dataset.confirmed = "1"; f.submit(); }
+  }, true);
+
+  // --- Radnja ne pomera stranicu --------------------------------------
+  // Pre svakog napuštanja (osvežavanje posle „Prelomi", „Snimi izmene",
+  // kraja obrade) pamti se skrol, fokusirano polje i otvorene trake; ista
+  // stranica ih vraća ako se otvori u narednih 30 s.
+  if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+  const VIEW_KEY = "pogled:" + location.pathname;
+  function detailsKey(d, i) { return d.id || "d" + i; }
+  window.addEventListener("pagehide", () => {
+    const a = document.activeElement;
+    const row = a && a.closest ? a.closest("tr[data-id]") : null;
+    const open = [...document.querySelectorAll("details")].map(detailsKey)
+      .filter((k, i) => document.querySelectorAll("details")[i].open);
+    try {
+      sessionStorage.setItem(VIEW_KEY, JSON.stringify({
+        at: Date.now(), y: window.scrollY, open,
+        focusRow: row ? row.dataset.id : null, focusId: a && a.id ? a.id : null,
+      }));
+    } catch (err) { /* bez skladišta: samo se ne pamti */ }
+  });
+  (function restoreView() {
+    let v = null;
+    try { v = JSON.parse(sessionStorage.getItem(VIEW_KEY) || "null"); } catch (err) { return; }
+    if (!v || Date.now() - v.at > 30000) return;
+    document.querySelectorAll("details").forEach((d, i) => {
+      if (v.open.includes(detailsKey(d, i))) d.open = true;
+    });
+    const el = v.focusRow
+      ? document.querySelector(`tr[data-id="${v.focusRow}"] .text`)
+      : (v.focusId ? document.getElementById(v.focusId) : null);
+    if (el) el.focus({ preventScroll: true });
+    window.scrollTo(0, v.y);
+    requestAnimationFrame(() => window.scrollTo(0, v.y));  // posle fontova i slika
+  })();
+
+  // --- Trake sa sadržajem (Dnevnik, Verzije, Ponovi prepoznavanje) -----
+  // Zatvaraju se klikom van i Esc, otvorena je najviše jedna. Traka sa
+  // upisanim tekstom (termini iz snimka) ostaje otvorena — da se upis ne izgubi.
+  function keepsOpen(d) {
+    return [...d.querySelectorAll("textarea")].some(t => t.value.trim());
+  }
+  document.addEventListener("toggle", (e) => {
+    const d = e.target;
+    if (!(d instanceof HTMLDetailsElement) || !d.open) return;
+    document.querySelectorAll("details[open]").forEach(o => {
+      if (o !== d && !o.contains(d) && !keepsOpen(o)) o.open = false;
+    });
+  }, true);
+  document.addEventListener("click", (e) => {
+    if (e.target.closest(".modal-back") || pop.contains(e.target)) return;
+    document.querySelectorAll("details[open]").forEach(o => {
+      if (!o.contains(e.target) && !keepsOpen(o)) o.open = false;
+    });
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (popFor) { closePop(); return; }
+    document.querySelectorAll("details[open]").forEach(o => { if (!keepsOpen(o)) o.open = false; });
+  });
+  </script>
+</body>
+</html>

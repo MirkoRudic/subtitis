@@ -1,0 +1,325 @@
+{
+  "_zasto": [
+    "Javni repozitorijum ne sme da sadrži naziv stvarne organizacije, ime stvarne osobe, ime klijentskog projekta ni doslovnu rečenicu iz stvarnog snimka — ni u kodu, ni u testovima, ni u dokumentima, ni u komentarima.",
+    "Spisak je ovde kao SHA-256 heševi, ne kao čitljive reči: čitljiv spisak bi sam objavio upravo ono što štiti (klijente, osobe iz snimaka, decu).",
+    "Pojam se pre heširanja svodi na latinicu, mala slova i slova bez dijakritike (`đ` i `dj` → `d`) i deli na reči; `celo` se poredi sa nizom uzastopnih reči, `osnova` sa početkom svake reči (padeži: osnova `izmislj` hvata i `izmišljenoj`). Normalizacija je `reci()` u scripts/zabranjen_pojam.py — ista za spisak i za pretragu.",
+    "Nov pojam: `python scripts/zabranjen_pojam.py \"Naziv\"` ispisuje unos za ovaj fajl. Proveru radi tests/test_javni_repo.py nad `git ls-files`.",
+    "Spisak hvata nazive, ali ne i izjave — izjava nema naziv. Za izjave postoji druga provera, po pravilu umesto po spisku: tests/izvorne_cetvorke.json."
+  ],
+  "celo": [
+    {
+      "reci": 2,
+      "h": "00542964ed20ab2c6bb5903911e85c46d525a918696af16433b0cbb12cae33a1"
+    },
+    {
+      "reci": 1,
+      "h": "04c91a1e3947367ed0b657c7dcaae91e0a20231c61e73974e5015b517a868a96"
+    },
+    {
+      "reci": 1,
+      "h": "096c44dd014025cb3a663d2a68a03783fa7802494febfd6327287cb9141c0a17"
+    },
+    {
+      "reci": 1,
+      "h": "10e1606e1e886aaea281552b951c0c869a804250e27163889af3163fac329ffa"
+    },
+    {
+      "reci": 1,
+      "h": "1198cd6601d5db5dc00c2276053f005547a49d3a114bec3da83efa026b7772af"
+    },
+    {
+      "reci": 1,
+      "h": "152fc4dddcedc0be83ea10cd2667d9e4218b00439c65cb352f4a048e409203b2"
+    },
+    {
+      "reci": 1,
+      "h": "17b46e0b7f9c5db4468cbcdcc06316393076bc0c4da4c2abbc7457fc78f1647f"
+    },
+    {
+      "reci": 1,
+      "h": "1a30ed961f81b1d86bad52343c93e738d8844095491d3f2d7bbc022ccd6b9512"
+    },
+    {
+      "reci": 1,
+      "h": "1b11f092d8951c92ead49c4fbf06004f00789cd6cb2679d3ba332a170e2b6f57"
+    },
+    {
+      "reci": 1,
+      "h": "20ee2f2ff4b252b75a0bf13c238854949abb1a347427602750a9dab7aa4f5d1c"
+    },
+    {
+      "reci": 1,
+      "h": "230fa7a87acb696ed28b78d4eff69479caaf833840a77a8c6cee146817f22af7"
+    },
+    {
+      "reci": 1,
+      "h": "27d5261ddb021c8478e1de188dd986368f52fce4340e07d541ae2f870882d877"
+    },
+    {
+      "reci": 1,
+      "h": "2a41e432337f6dac6534f902c6aab466bdab53e26324cb95ea38f9c74f798c5b"
+    },
+    {
+      "reci": 1,
+      "h": "34c111b8f6087eb3b547bb36682a3be1cca2ce21991dc56a724770e74554d6f2"
+    },
+    {
+      "reci": 1,
+      "h": "35e097c2592e6f1f60956fda568e90581153158a4bd09f51f1e4e08a83f93d6f"
+    },
+    {
+      "reci": 3,
+      "h": "37f9af3cff871e53c8aee4219fb250e0b346e8ee2aa556607dd720a077fd9229"
+    },
+    {
+      "reci": 1,
+      "h": "3a5bc713045168c8cf6aaa660ed9491de7d715c4799f431d411fb8fa8cade9bb"
+    },
+    {
+      "reci": 1,
+      "h": "3aaf01dbd5d34c67aeef2840547eb83a574772957437ebf458db3d4fadd3b2f9"
+    },
+    {
+      "reci": 1,
+      "h": "3b9c083cf1925df50e1e7db938ece186fa153d14782b30cf4960a069a2a0f68d"
+    },
+    {
+      "reci": 1,
+      "h": "3f00822ab3409980878cf50d4d501352597d77ead2fd288c5b9d958ec4d4ef91"
+    },
+    {
+      "reci": 3,
+      "h": "41915fd8f37ad8487018779aa12151503496ee06487edee9cbd836e41d6a256c"
+    },
+    {
+      "reci": 1,
+      "h": "44b660850cb906161098c854da222febb4ef17a138c0656bb029f491beccd974"
+    },
+    {
+      "reci": 1,
+      "h": "4aa39216d433ee1c30cb04e67c90176db19b7acdec71c0e83e77c4d0aecd9ae4"
+    },
+    {
+      "reci": 1,
+      "h": "5735cde9de2e6c9e19f4c99aa896e56d4ece07227b0a1122d2a02105cb113bdd"
+    },
+    {
+      "reci": 1,
+      "h": "5fe845ef790094bd4493ef07ca61146d0c0aee1eff14e6d1d2747a05005e0066"
+    },
+    {
+      "reci": 1,
+      "h": "66d840d3533f7421da7b88497a5133c325cfeeeaaccd3aab9508476b3f8c46ed"
+    },
+    {
+      "reci": 2,
+      "h": "6a2bbd7c648865cf723ce09825dfa17c1972e20da78302943090c4e66f196f59"
+    },
+    {
+      "reci": 1,
+      "h": "6b9a57410772279c238345d5c314a8973e845fbc99ea4df1d2f416b5f2e8b402"
+    },
+    {
+      "reci": 1,
+      "h": "6e3e40f6b7d028bb19632bd813e216acb83cedc7428387ede5497d68c192eef9"
+    },
+    {
+      "reci": 2,
+      "h": "73e3e18a6bc4550f7c7e4fda6fd153b2d90390d7e0b4785163bff69245d1aee8"
+    },
+    {
+      "reci": 1,
+      "h": "7b14ae8acdb69ebd7a03ac73b2733c8933581faf4e616f69c1e6fedec1bb12ac"
+    },
+    {
+      "reci": 1,
+      "h": "7b4fe9ab2fabce227475a0084a2baae95014db7afdd8100868bd68d27011dffa"
+    },
+    {
+      "reci": 1,
+      "h": "7c8ccc86c11654af029457d90fdd9d013ce6fb011ee8fdb1374832268cc8d967"
+    },
+    {
+      "reci": 2,
+      "h": "7d1e6cfbdded6730c1e818e093feb0994431913faa04513cc722cd90c3eae761"
+    },
+    {
+      "reci": 1,
+      "h": "7ddd1de444f9dd6207f80bfba85b2dee687cd4b5cb7ceb76fa72516a9c95f587"
+    },
+    {
+      "reci": 2,
+      "h": "87f2495c75a0dd6b7e472bc3f690ce5ae9c427680dbe3986f89dd0eac352787a"
+    },
+    {
+      "reci": 1,
+      "h": "888580afc4fc4ec990fff450da0be2818f60041a12d67f8c6c9155c7326c92c6"
+    },
+    {
+      "reci": 2,
+      "h": "930c123062007ee948640502e153ab99b4c80f15d83245d3166caa8be63eb924"
+    },
+    {
+      "reci": 1,
+      "h": "a1f151b2745a5437b90a1a6e8cb598848d30fb20a487225c712c7343688c8a56"
+    },
+    {
+      "reci": 1,
+      "h": "ab2a704f7d9df1173c9f9229cf1afc1420dae1039100ec4ed496098e6dae6f86"
+    },
+    {
+      "reci": 1,
+      "h": "b2d4f30305fc2a29a070a7eec4505be7b5655f3fc870fc6baabdc4d33e973b6f"
+    },
+    {
+      "reci": 1,
+      "h": "b3de65415fca10c4d200f2cfbe23563d1cdf38afd66ea0862d92d0a3c4736216"
+    },
+    {
+      "reci": 1,
+      "h": "b68c0d98e62d81a258ff71707881d3c7b5d0e53d99ff15c3c02457c3bf994cdf"
+    },
+    {
+      "reci": 1,
+      "h": "ba11b428d89706a956c69d404af93055c2b75da96dbe298bbbefa7c093954611"
+    },
+    {
+      "reci": 1,
+      "h": "bcda9a8c6383e48d68c3953e8d808ea36fc60ff50a7ecf0e7596b4b0cf3ccc46"
+    },
+    {
+      "reci": 1,
+      "h": "be879f7549cc80c04241dcfd933c6278c3a711ddc530961071f62c57324d6a9e"
+    },
+    {
+      "reci": 1,
+      "h": "c2a0cda4ab7bb30d2edcd9966997155de418d50b9a88523b449ce5bd6bcff85d"
+    },
+    {
+      "reci": 3,
+      "h": "c2d2af691d2d799f1a39108c59390347a695f9486748f23bf23925a169072ece"
+    },
+    {
+      "reci": 1,
+      "h": "c3f6fafd0620f5ce734cd8c7dc81d3ba8ad0349cba4885f4fa00b0be3b3d7cc6"
+    },
+    {
+      "reci": 4,
+      "h": "c7b0241a9de74df0b2848578291c43d629f2fb38744c0f40692a52767f9544ed"
+    },
+    {
+      "reci": 1,
+      "h": "c9fd92c735c7609969a0ab48b6dc2fda85a06e135196571c06708222baf5a2e7"
+    },
+    {
+      "reci": 2,
+      "h": "cde48dc5bbe77dabc1957972758a9687e5290be43b4d4383bc4d9d9949592b0a"
+    },
+    {
+      "reci": 1,
+      "h": "d4f1db194bb79af43c9b23c55326b3744c19fc9613e648c04b8edd4d723e3b21"
+    },
+    {
+      "reci": 2,
+      "h": "d958b7c104d6a2690ba5322cde85e4706068d03c83c08d60e200af44b5793450"
+    },
+    {
+      "reci": 1,
+      "h": "d97d1e57fe7fdbf71f9d6ecf881df0c9ca02a0ab35df6ddc2fbe85a57fb9752f"
+    },
+    {
+      "reci": 2,
+      "h": "dc8f29b40031a38d4e73ca4aa7f67f8ae00eada1397c344ef7e94e8f7fbd42d4"
+    },
+    {
+      "reci": 2,
+      "h": "e85910c13ff1c8334686189aa299ce5c482e6468ac166d9e0cb3979baf3d5992"
+    },
+    {
+      "reci": 1,
+      "h": "eb7f41ab08cf06fbe7bdc5624a1049d7676e8c7cd0057625b2da795e95461d0c"
+    },
+    {
+      "reci": 1,
+      "h": "edd023a83a9221dffba73d006c8c4aa2dcba31900271cb9338dc50657bd18d40"
+    },
+    {
+      "reci": 1,
+      "h": "ef17585f771af4bd4d26fad5694fac45a5d1db1555af9aae67b1d3b1d7e1910e"
+    },
+    {
+      "reci": 1,
+      "h": "f50ccb98908dd89ef400372d10750d4c506bebdc34c8141e11d2fb962ebb1b5d"
+    },
+    {
+      "reci": 1,
+      "h": "f8700b1d6b66014f0386fed1bb4ac60bd11d92ee9ddb36bb0ba01789759c2097"
+    },
+    {
+      "reci": 1,
+      "h": "fd5197dd5fffff7011122ad8a70ae218feffada53f55d7d643d0913ccfa0cbbb"
+    },
+    {
+      "reci": 1,
+      "h": "fec00c8c89620c61b632ade191d6613df630c26018bab36aab4ff0cbdb0160b7"
+    },
+    {
+      "reci": 1,
+      "h": "ffb9f6dd347ad91c0cb28dfb1811fe35b3db77e075d95414a275d4621083a896"
+    }
+  ],
+  "osnova": [
+    {
+      "duzina": 6,
+      "h": "031dc468e8477d392884d225bd645ee5be4301dcdf5230deefdea7962e56f616"
+    },
+    {
+      "duzina": 6,
+      "h": "096c44dd014025cb3a663d2a68a03783fa7802494febfd6327287cb9141c0a17"
+    },
+    {
+      "duzina": 5,
+      "h": "17b46e0b7f9c5db4468cbcdcc06316393076bc0c4da4c2abbc7457fc78f1647f"
+    },
+    {
+      "duzina": 5,
+      "h": "20ee2f2ff4b252b75a0bf13c238854949abb1a347427602750a9dab7aa4f5d1c"
+    },
+    {
+      "duzina": 6,
+      "h": "34c111b8f6087eb3b547bb36682a3be1cca2ce21991dc56a724770e74554d6f2"
+    },
+    {
+      "duzina": 5,
+      "h": "4aa39216d433ee1c30cb04e67c90176db19b7acdec71c0e83e77c4d0aecd9ae4"
+    },
+    {
+      "duzina": 8,
+      "h": "5ca0a80a7edc5e0fb14d06830d0f1689d93b67ae58983ccb522e08570e2df58f"
+    },
+    {
+      "duzina": 14,
+      "h": "85c57b9fb1cfc5d508f2cd128b8643e38ab27626b5387faaac4bfe311c32fa78"
+    },
+    {
+      "duzina": 5,
+      "h": "9b68f3e609404d9c10136c408486032bfde0e404d3c05779b6e05b743a427355"
+    },
+    {
+      "duzina": 5,
+      "h": "9e7d418d987a7d6c592e59ecd0d6e0782adc548348f8b967200dfeb5bc2a77c4"
+    },
+    {
+      "duzina": 8,
+      "h": "c3e07ffacb7e6d69b916ede2b7f3c1c01aba683651baf7af0bc0149943ba06d3"
+    },
+    {
+      "duzina": 7,
+      "h": "eb553a901ade80255434e6a7b8524f161a89c1de9d95a4781d054c684096da04"
+    },
+    {
+      "duzina": 7,
+      "h": "ffb9f6dd347ad91c0cb28dfb1811fe35b3db77e075d95414a275d4621083a896"
+    }
+  ]
+}

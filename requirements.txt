@@ -1,0 +1,27 @@
+# Subtitis — Faza 1 (ASR pajplajn bez prevoda)
+# Python 3.11 obavezno: ctranslate2 nema wheel-ove za 3.12+ na Windows-u u trenutku pisanja.
+
+faster-whisper>=1.1.0,<2
+typer>=0.15.0,<1
+pydantic>=2.9,<3
+
+# CUDA runtime biblioteke koje ctranslate2 traži na Windows-u.
+# Bez njih dobijaš "Library cublas64_12.dll is not found" na device="cuda".
+nvidia-cublas-cu12>=12.4
+nvidia-cudnn-cu12>=9.1,<10
+
+# dashboard (Faza 3) — bez build koraka, htmx je vendorovan u web/static/
+fastapi>=0.115
+uvicorn[standard]>=0.32
+jinja2>=3.1
+python-multipart>=0.0.9
+
+# desktop pokretanje (`subtitis desktop`) — ikonica u sistemskoj traci.
+# NEOBAVEZNO: bez ovoga server radi isto, samo bez ikonice.
+pystray>=0.19
+Pillow>=10           # i za scripts/make_icon.py
+
+# testovi
+pytest>=8.0
+httpx>=0.28          # fastapi.testclient
+coverage>=7          # razvojno: pokrivenost testovima (krug 15)

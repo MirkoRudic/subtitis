@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% from "_help.html" import help, why %}
+{% block title %}Podešavanja — Subtitis{% endblock %}
+
+{% block content %}
+<div class="pjhead">
+  <h1>Podešavanja</h1>
+  {% if saved %}<span class="pill done">snimljeno ({{ saved }})</span>{% endif %}
+</div>
+
+<form method="post" action="/settings">
+<section class="panel">
+  <h3><span class="field-label">Podrazumevane vrednosti{% call why(za="Podrazumevane vrednosti", kratko="Upisuje se u <code>" ~ config_file ~ "</code>. Promenljive okruženja imaju prednost nad ovim vrednostima.") %}{% endcall %}</span></h3>
+  <div class="grid-fields">
+    <label class="f"><span>Profil prelamanja</span>
+      <select name="default_profile">
+        {% for p in profiles %}
+          <option value="{{ p }}" {% if p == values.default_profile %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
+      {% if 'default_profile' in env_overrides %}
+        <span class="hint err">SUBTITIS_PROFILE={{ env_overrides.default_profile }} ima prednost</span>
+      {% endif %}
+    </label>
+
+    <label class="f"><span>Ciljni jezik prevoda</span>
+      <select name="default_target_language">
+        {% for code, name in target_langs %}
+          <option value="{{ code }}" {% if code == values.default_target_language %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="f"><span class="field-label">Prevod{% call why(za="Prevod", kratko="Direktno, ili preko engleskog: tekst se prvo prevede na engleski, pa sa engleskog na ciljni jezik.") %}
+        <p>Važi za sve projekte, zato se bira ovde, a ne na stranici projekta.
+        Preko engleskog prevod traje dvaput duže i greška iz prvog koraka prelazi
+        u drugi; vredi ga uključiti samo kad je na tvom materijalu izmereno da je
+        bolji. Pojedinačni prevod iz komandne linije može da ga promeni
+        (<code>--pivot</code>).</p>{% endcall %}</span>
+      <select name="translation_pivot">
+        <option value="" {% if not values.translation_pivot %}selected{% endif %}>direktno</option>
+        <option value="en" {% if values.translation_pivot == 'en' %}selected{% endif %}>preko engleskog</option>
+      </select>
+    </label>
+
+    <label class="f"><span>Model za prevod i interpunkciju</span>
+      <input type="text" name="llm_model" value="{{ values.llm_model }}">
+      {% if 'llm_model' in env_overrides %}
+        <span class="hint err">SUBTITIS_LLM_MODEL={{ env_overrides.llm_model }} ima prednost</span>
+      {% endif %}
+    </label>
+
+    <label class="f"><span class="field-label">Brisanje radne kopije zvuka, dana{{ why("Posle ovoliko dana se radna kopija zvuka briše sama; dugme ▶ tada više ne radi, a prepis i titlovi ostaju. 0 isključuje brisanje.", za="Brisanje radne kopije zvuka") }}</span>
+      <input type="number" name="source_wav_ttl_days" min="0" max="3650"
+             value="{{ values.source_wav_ttl_days }}">
+    </label>
+  </div>
+</section>
+
+<section class="panel">
+  <h3><span class="field-label">Glosar novog projekta{% call why(za="Glosar novog projekta", kratko="Šta nov projekat dobija kao glosar. Termini iz glosara ulaze u prepoznavanje govora. <strong>Prazan glosar je ispravan izbor</strong> — tuđi termini umeju da završe u prepisu.") %}
+    <p>Glosar ide u prepoznavanje kao lista reči koje model očekuje, i to u
+    svaki odsečak snimka. Gde model nema šta da čuje — muzika, tišina — vrati
+    baš te reči. Mereno na snimku od 32 s sa džinglom na kraju, isti fajl:</p>
+    <table>
+      <tr><th>glosar</th><th>reči</th><th>preko džingla</th></tr>
+      <tr><td>prethodnog projekta</td><td class="n">77</td>
+        <td><code>Otvorena vrata, letnja radionica … OKC, Divčibare, Srbija</code></td></tr>
+      <tr><td>prazan</td><td class="n">66</td><td>nijedan termin</td></tr>
+    </table>
+    <p>Projekat dobija svoju kopiju glosara: izmena podrazumevanog posle toga ne
+    menja taj projekat. Termini iz samog snimka upisuju se pri otpremanju
+    („dodaj termine iz snimka") ili kroz „Ponovi prepoznavanje".</p>{% endcall %}</span></h3>
+  <div class="choice-list">
+    <label class="choice">
+      <input type="radio" name="new_project_glossary" value="default"
+             {% if values.new_project_glossary == 'default' %}checked{% endif %}>
+      <span class="choice-label">kopija podrazumevanog</span>
+      <span class="muted small">{{ default_glossary_terms }} termina za srpski; uređuje se ispod</span>
+    </label>
+    <label class="choice">
+      <input type="radio" name="new_project_glossary" value="none"
+             {% if values.new_project_glossary == 'none' %}checked{% endif %}>
+      <span class="choice-label">bez glosara</span>
+      <span class="muted small">nijedan termin iz drugih projekata</span>
+    </label>
+  </div>
+</section>
+
+<section class="panel">
+  <h3>Interpunkcija</h3>
+  <div class="choice-list">
+    <label class="choice">
+      <input type="checkbox" name="auto_punctuate" {% if values.auto_punctuate %}checked{% endif %}>
+      <span class="choice-label">vraćanje interpunkcije se pali samo</span>
+      <span class="muted small">kad prepoznavanje ne vrati tačke i zareze</span>
+    </label>
+    {% if 'auto_punctuate' in env_overrides %}
+      <span class="hint err">SUBTITIS_AUTO_PUNCTUATE={{ env_overrides.auto_punctuate }} ima prednost</span>
+    {% endif %}
+  </div>
+</section>
+
+<div class="actions left settings-save"><button type="submit" class="btn sm primary">Snimi podešavanja</button></div>
+</form>
+
+<section class="panel">
+  <h3><span class="field-label">Glosar{% call why(za="Glosar", kratko="Tabela termina koji se prevode na tačno određen način. Koristi se na <strong>dva mesta</strong>: ključevi pomažu prepoznavanju govora da pogodi imena, a celi parovi ulaze u prevodni upit.") %}
+    <p>Mereno na istom snimku, jedina razlika glosar:</p>
+    <table>
+      <tr><th>termin</th><th>bez glosara</th><th>sa glosarom</th></tr>
+      <tr><td>Radionica otvorenih vrata</td><td>Workshop of Open Doors</td><td>Open Door Workshop</td></tr>
+      <tr><td>animator</td><td>caregiver</td><td>activity leader</td></tr>
+      <tr><td>sporazumevati se</td><td>to reach an agreement</td><td>understand each other</td></tr>
+    </table>
+    <p>Tri od tri, i greška se vraća čim se unos ukloni.</p>
+    <p><strong>Upisuju se i termini koje ne treba menjati</strong>, npr.
+    <code>"Đurđević": "Đurđević"</code> — da ih model ne transliteruje ili „popravi".</p>
+    <p>Upisuje se u <code>{{ glossary_file }}</code>; prethodna verzija se čuva kao
+    <code>.bak</code>. Postojeći termin u istom smeru se prepisuje.</p>
+    <p>Primer: smer <code>sr->en</code>, termin <code>Radionica otvorenih vrata</code>,
+    prevod <code>Open Door Workshop</code>. Ime koje se ne menja:
+    <code>Đurđević</code> → <code>Đurđević</code>.</p>
+  {% endcall %}</span></h3>
+
+  {% if glossary %}
+    <table>
+      <thead><tr><th>smer</th><th>termin</th><th>prevod</th><th></th></tr></thead>
+      <tbody>
+        {% for g in glossary %}
+          <tr>
+            <td><code>{{ g.pair }}</code></td>
+            <td>{{ g.term }}</td>
+            <td>{{ g.translation }}</td>
+            <td>
+              <form method="post" action="/settings/glossary"
+                    data-confirm-title="Obrisati „{{ g.term }}“ iz glosara?"
+                    data-confirm-body="Smer {{ g.pair }}. Prethodna verzija glosara ostaje kao rezervna kopija."
+                    data-confirm-ok="Obriši termin" data-confirm-danger="true">
+                <input type="hidden" name="pair" value="{{ g.pair }}">
+                <input type="hidden" name="term" value="{{ g.term }}">
+                <input type="hidden" name="translation" value="{{ g.translation }}">
+                <input type="hidden" name="remove" value="on">
+                <button class="link danger" type="submit">obriši</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">Glosar je prazan.</p>
+  {% endif %}
+
+  <form method="post" action="/settings/glossary" class="row-form">
+    <label>Smer
+      <input type="text" name="pair" value="sr->en" size="8" required>
+    </label>
+    <label>Termin
+      <input type="text" name="term" size="24" required placeholder="Radionica otvorenih vrata">
+    </label>
+    <label>Prevod
+      <input type="text" name="translation" size="24" required
+             placeholder="Open Door Workshop">
+    </label>
+    <button type="submit" class="btn sm ghost">Dodaj</button>
+  </form>
+</section>
+{% endblock %}
