@@ -245,7 +245,10 @@ def test_ukljuceno_prelamanje_pravi_i_koristi_pauses_json(asr_posao, monkeypatch
     monkeypatch.setattr(lb, "PAUSE_BREAK_DISCOUNT", 50)
     monkeypatch.setattr(pauses, "detect", lambda wav: pauses.PausesFile(
         made_with={"vad": "silero"}, silences=tisina_posle(ws, 4)))
-    pipeline.run_build("a", profile="web", out=tmp_path / "a.srt")
+    # Sopstveni uzak profil (kao `JEDAN_RED`), da test ne zavisi od širine `web`.
+    (cfg.PROFILES_DIR / "uzak.json").write_text(json.dumps(
+        JEDAN_RED.model_dump() | {"name": "uzak"}), encoding="utf-8")
+    pipeline.run_build("a", profile="uzak", out=tmp_path / "a.srt")
     assert pauses.path("a").exists()
     srt = (tmp_path / "a.srt").read_text(encoding="utf-8")
     assert "idemo kolima\n" in srt

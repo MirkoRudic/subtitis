@@ -550,3 +550,75 @@ u dvorednom `tv` strana veznika je jasno bolja ispred, a smetaju samo dve
 granične mere; u jednorednom profilu od 20 znakova rez ispred veznika
 često nema gde da stane — drugi primer iz povoda (veznik i nastavak, 23
 znaka) ne može da stane u jedan red ni u jednoj varijanti.
+
+## Obrazac: ono što pomaže u dvorednom prelomu šteti u jednorednom (2026-10-12)
+
+Dva kruga zaredom isti nalaz, na istim poslovima:
+
+| promena | `tv` (42 zn., 2 reda) | `web`/`digital` (20 zn., 1 red) |
+|---|---|---|
+| pauza iz zvuka kao jeftin rez (krug 19) | 4 : 1 | 0 : 3 |
+| rez ispred veznika (krug 20) | 16 : 1 | 11 : 6 |
+
+To nije slučajnost nego svojstvo oblika: u dvorednom titlu rez pada otprilike
+jednom po rečenici i ima izbora gde; u redu od 20 znakova pada na svake dve
+do tri reči i izbora nema — pravilo koje pomera rez nema kuda da ga pomeri
+osim na lošije mesto. Posledica za merenja: odnos bolje : gore se uvek čita
+po obliku odvojeno, a pravilo prelamanja se sme vezati za oblik.
+
+I zapis o kriterijumu, treći put isti: u krugu 20 je `tv` pao na dve mere
+koje su porasle za jedan — cue od 19 znakova pri granici 20 (u rečenici
+ocenjenoj kao bolja) i 20,5 CPS pri granici 20 — uz čitanje 16 : 1.
+„Nijedna mera ne sme da poraste" je bilo prestrogo: kriterijum se bira pre
+merenja, ali se proverava posle njega, i popravka se ne odbacuje zato što
+nije dostigla proizvoljan cilj. Granično pogoršanje koje je viđeno i
+pročitano se zapisuje uz konstantu, ne obara rezultat.
+
+## 2026-10-12 — Krug 21: da li je 20 znakova pretesno (merenje, bez izmene)
+
+`scripts/krug21_granica.py` na 15 srpskih ASR poslova (70 rečenica); profil
+`web` sa promenjenom širinom, donja granica srazmerna (10 na 20), ostalo kao
+`web` (20 CPS, 0,5–4 s). Strana veznika je svuda `after`.
+
+| granica | donja | cue-ova | rečenica u 1 redu | u 1 cue-u | iza predloga | ispred enklitike | iza / ispred veznika | ispod donje | preko CPS | trajanje prosek / najduže |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 20 | 10 | 371 | 7 (10 %) | 7 | 3 | 2 | 41 / 40 | 33 | 52 | 1,17 / 10,74 s |
+| 24 | 12 | 300 | 12 (17 %) | 12 | 0 | 0 | 30 / 32 | 18 | 32 | 1,46 / 10,72 s |
+| 28 | 14 | 261 | 14 (20 %) | 14 | 0 | 0 | 33 / 27 | 12 | 18 | 1,71 / 11,08 s |
+| 32 | 16 | 225 | 17 (24 %) | 17 | 0 | 0 | 26 / 21 | 3 | 16 | 1,99 / 11,08 s |
+| 28 × 2 reda | 14 | 183 | 14 (20 %) | 21 | 0 | 0 | 42 / 21 | 16 | 8 | 2,47 / 11,08 s |
+
+Najduži cue (~11 s) je u svim varijantama jedna reč preko duge tišine — ne
+može se preseći, nije posledica širine. Već na 24 znaka nestaju svi rezovi
+iza predloga i ispred enklitike, a prekoračenja CPS-a padaju za trećinu; 28
+ih prepolovi još jednom. Celih rečenica u jednom redu ima malo i na 32 (24 %)
+— izgovorene rečenice su duge — pa širina ne uklanja prelom nego mu daje
+izbor. Izbor vrednosti je odluka o izgledu i nije donet ovde.
+
+## 2026-10-12 — Krug 21: uvedeno — `before` u dva reda, `web`/`digital` 28 znakova
+
+Dve izmene, odobrene posle merenja iznad:
+
+- `LanguageRules.conjunction_side_multiline` — srpski u profilu sa
+  `max_lines >= 2` lomi ispred veznika; jednoredni ostaje iza. Veza je kroz
+  broj redova, ne kroz ime profila.
+- `web` i `digital`: 28 znakova po redu, donja granica 14 (bilo 20 / 10).
+
+Stanje posle obe izmene zajedno, na 15 srpskih ASR poslova (`tv` nema donju
+granicu, pa je tu „ispod donje" 0; po meri iz kruga 20, `MIN_CUE_CHARS`, je
+2 -> 3):
+
+| slučaj | cue-ova | rečenica u 1 redu | u 1 cue-u | iza predloga | ispred enklitike | iza / ispred veznika | ispod donje | preko CPS | trajanje prosek / najduže |
+|---|---|---|---|---|---|---|---|---|---|
+| `tv` pre (after) | 126 | 21 | 33 | 0 | 0 | 33 / 20 | — | 3 | 3,64 / 13,46 s |
+| `tv` sada (before) | 132 | 21 | 31 | 0 | 0 | 5 / 43 | — | 4 | 3,47 / 13,46 s |
+| `web` pre (20, after) | 371 | 7 | 7 | 3 | 2 | 41 / 40 | 33 | 52 | 1,17 / 10,74 s |
+| `web` sada (28, after) | 261 | 14 | 14 | 0 | 0 | 33 / 27 | 12 | 18 | 1,71 / 11,08 s |
+| 28 × 2, after (nije uvedeno) | 183 | 14 | 21 | 0 | 0 | 42 / 21 | 16 | 8 | 2,47 / 11,08 s |
+| 28 × 2, before (nije uvedeno) | 183 | 14 | 22 | 0 | 0 | 6 / 49 | 13 | 7 | 2,47 / 11,08 s |
+
+`web`/`digital` je glavna promena: rezovi iza predloga i ispred enklitike
+nestaju, prekoračenja CPS-a padaju sa 52 na 18, kratki cue-ovi sa 33 na 12.
+Dvoredni 28 × 2 sa `before` bi CPS spustio još (18 -> 7) i stavio više
+rečenica u jedan natpis (14 -> 22), uz duže natpise (1,71 -> 2,47 s) — to je
+drugi oblik natpisa, zaseban izbor, nije uveden.

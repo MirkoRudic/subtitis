@@ -1,9 +1,9 @@
 {
   "name": "web",
-  "note": "Vertikalni video: natpis preko sredine kadra, jedan red od 10 do 20 znakova.",
-  "_zasto": "Dosadašnji `digital` (krugovi 6 i 7, merenja u merenja/dnevnik.md pod tim imenom).",
-  "max_chars_per_line": 20,
-  "min_chars_per_line": 10,
+  "note": "Vertikalni video: natpis preko sredine kadra, jedan red od 14 do 28 znakova.",
+  "_zasto": "Dosadašnji `digital` (krugovi 6 i 7, merenja u merenja/dnevnik.md pod tim imenom). Krug 21: 20 -> 28 znakova (donja 10 -> 14) — na 20 je izgovorena sintagma morala da se seče gde god; na 28 nestaju rezovi iza predloga i ispred enklitike, a prekoračenja CPS-a padaju sa 52 na 18. Izbor širine je odluka o izgledu (merenja/dnevnik.md, 2026-10-12).",
+  "max_chars_per_line": 28,
+  "min_chars_per_line": 14,
   "max_lines": 1,
   "max_cps": 20,
   "min_duration": 0.50,

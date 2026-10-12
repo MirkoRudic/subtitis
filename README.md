@@ -1418,7 +1418,7 @@ je jedini zapis o tome šta je stvarno primenjeno.
 | profil | prelom | izlaz | namena |
 |---|---|---|---|
 | `tv` | 2 reda × 42 zn., 20 CPS, 0,83–7 s | normalno | klasičan titl (podrazumevani) |
-| `web` | 1 red, 10–20 zn., 20 CPS, 0,50–4 s | normalno | vertikalni video |
+| `web` | 1 red, 14–28 zn., 20 CPS, 0,50–4 s | normalno | vertikalni video |
 | `digital` | isto kao `web` | VELIKA slova, bez interpunkcije | društvene mreže |
 
 `tv` je dosadašnji `web` (a pre kruga 6 `netflix`), `web` je dosadašnji

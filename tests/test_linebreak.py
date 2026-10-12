@@ -425,11 +425,46 @@ def test_en_fr_lome_ispred_veznika(lang, text, conj):
     assert span.break_pen[k] > PENALTY_BREAK_AFTER_CONJUNCTION       # iza
 
 
-def test_srpski_i_dalje_lomi_iza_veznika():
-    toks, span = _span("Bio sam umoran i onda sam otišao kući", "sr")
-    k = toks.index("i")
-    assert span.break_pen[k] == PENALTY_BREAK_AFTER_CONJUNCTION
-    assert span.break_pen[k - 1] > PENALTY_BREAK_AFTER_CONJUNCTION
+def _sr_span(text: str, max_lines: int) -> tuple[list[str], _Span]:
+    toks = _tok(text)
+    ws = [_Word(i=k, s=0.0, e=0.0, w=t, p=1.0) for k, t in enumerate(toks)]
+    return toks, _Span(ws, _Profile(name="t", max_lines=max_lines), rules_for("sr"))
+
+
+@pytest.mark.parametrize("word", ["i", "da"])
+def test_srpski_u_jednom_redu_lomi_iza_veznika(word):
+    """Krug 20: u redu od par reči rez ispred veznika nema kuda da ode."""
+    toks, span = _sr_span("Pera stiže sutra i zato moramo da krenemo rano", 1)
+    k = toks.index(word)
+    assert span.break_pen[k] == PENALTY_BREAK_AFTER_CONJUNCTION      # iza
+    assert span.break_pen[k - 1] > PENALTY_BREAK_AFTER_CONJUNCTION   # ispred
+
+
+@pytest.mark.parametrize("word", ["i", "da"])
+def test_srpski_u_dva_reda_lomi_ispred_veznika(word):
+    """Krug 21: dvoredni titl ima izbora, pa veznik ide u donji red (`treba / da bude`)."""
+    toks, span = _sr_span("Pera stiže sutra i zato moramo da krenemo rano", 2)
+    k = toks.index(word)
+    assert span.break_pen[k - 1] == PENALTY_BREAK_AFTER_CONJUNCTION  # ispred
+    assert span.break_pen[k] > PENALTY_BREAK_AFTER_CONJUNCTION       # iza
+
+
+def test_strana_veznika_u_dva_reda_ne_dira_engleski_ni_francuski():
+    for lang in ("en", "fr"):
+        assert rules_for(lang).conjunction_side_multiline is None
+        assert rules_for(lang).conjunction_side == "before"
+
+
+def test_dvoredni_prelom_stavlja_veznik_u_donji_red(profil):
+    """Ceo prelom, ne samo kazna: izmišljena rečenica iste građe kao povod."""
+    text = "Kada sve to završimo onda moramo da krenemo nazad kući pre mraka."
+    tv = Profile(name="tv", max_chars_per_line=42, max_lines=2, max_cps=99, max_duration=99)
+    one = Profile(name="w", max_chars_per_line=28, max_lines=1, max_cps=99, max_duration=99)
+    words = make_words(text)
+    two_lines = [l for c in layout_sentence(words, tv) for l in c.lines]
+    assert any(l.startswith("da ") for l in two_lines), two_lines
+    one_line = [l for c in layout_sentence(words, one) for l in c.lines]
+    assert not any(l.startswith("da ") for l in one_line), one_line
 
 
 @pytest.mark.parametrize("lang,text,det", [
@@ -500,12 +535,12 @@ def _cue_pairs(cues):
     ]
 
 
-def test_digital_jedan_red_do_20_znakova(digital):
+def test_digital_jedan_red_do_granice(digital):
     text = "Onda smo seli i razgovarali otvoreno o svemu sto nas je mucilo tih dana."
     cues = layout_sentence(make_words(text, dur_per_char=0.08), digital)
     assert len(cues) > 2
     for c in cues:
-        assert len(c.lines) == 1 and len(c.lines[0]) <= 20, c.lines
+        assert len(c.lines) == 1 and len(c.lines[0]) <= digital.max_chars_per_line, c.lines
 
 
 def test_digital_enklitika_i_predlog_i_dalje_vezu(digital):
@@ -529,10 +564,11 @@ def _dspan(text, profile):
 def test_kratak_red_se_kaznjava_po_znaku(digital):
     from subtitis.linebreak import PENALTY_BELOW_MIN_CHARS
 
+    floor = digital.min_chars_per_line
     span = _dspan("Da li ces doci sutra uvece?", digital)
     # "Da li" = 5 znakova, a ostatak rečenice je dovoljno dug
-    assert span.line_cost(0, 2, False) == 5 * PENALTY_BELOW_MIN_CHARS
-    assert span.line_cost(0, 3, False) == 1 * PENALTY_BELOW_MIN_CHARS  # "Da li ces" = 9
+    assert span.line_cost(0, 2, False) == (floor - 5) * PENALTY_BELOW_MIN_CHARS
+    assert span.line_cost(0, 3, False) == (floor - 9) * PENALTY_BELOW_MIN_CHARS  # "Da li ces" = 9
 
 
 def test_kratka_cela_recenica_nije_kaznjena(digital):
@@ -546,8 +582,10 @@ def test_kratak_ostatak_duze_recenice_jeste_kaznjen(digital):
     from subtitis.linebreak import PENALTY_BELOW_MIN_CHARS
 
     span = _dspan("Čao, Nikola, šta ima?", digital)
-    # "ima?" = 4 znaka, ostatak je kratak, ali rečenica nije
-    assert span.line_cost(span.n - 2, span.n, False) == 6 * PENALTY_BELOW_MIN_CHARS
+    # "ima?" = 4 znaka, ostatak je kratak, ali rečenica nije (21 znak)
+    assert span.length(0, span.n) >= digital.min_chars_per_line
+    assert span.line_cost(span.n - 2, span.n, False) == (
+        digital.min_chars_per_line - 4) * PENALTY_BELOW_MIN_CHARS
 
 
 def test_bez_donje_granice_nema_kazne(profil):

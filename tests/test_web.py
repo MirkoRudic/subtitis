@@ -2232,7 +2232,7 @@ def test_zivi_red_samo_oblik_reda(web):
     page = client.get(f"/jobs/{make_job(cfg, db)}").text
     karte = json.loads(page.split("const CARDS = ")[1].split(";\n")[0])
     web_karta = next(k for k in karte if k["name"] == "web")
-    assert web_karta["min_chars"] == 10 and web_karta["max_lines"] == 1
+    assert web_karta["min_chars"] == 14 and web_karta["max_lines"] == 1
     js = page.split("function renderWhat()")[1].split("\n}\n")[0]
     assert "reda po najviše" in js and "Jedan red od" in js
     assert "brzina čitanja" not in js and "Latinica" not in js and "SVA SLOVA" not in js

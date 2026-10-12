@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import difflib
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable
 
 from . import config as cfg
@@ -185,14 +185,19 @@ SR_PREPOSITIONS = frozenset({
 #: glagolom (`ne možemo`): kao predlog, ne sme da ZAVRŠI red (krug 7).
 SR_NEGATION = frozenset({"ne"})
 
-#: Veznici iz specifikacije. Srpski lomi IZA veznika (`conjunction_side`
-#: "after"). Mereno 2026-10-12 (krug 20, `merenja/dnevnik.md`) na 15 ASR
-#: poslova: rez iza veznika 33 od 122 u `tv`, 41 od 301 u `web`/`digital`.
-#: `before` (kao engleski) i `before` sa `da` u `no_line_end` (i uz to `pa`,
-#: `te`) čitaju se bolje u `tv` (14 : 1), ali ne u `web`/`digital` (11 : 6), i
-#: svaka podiže bar jednu meru koja ne sme da poraste — u `tv` kratak cue i
-#: CPS (+1, +1), u `web` rez iza predloga (+1) i kratke cue-ove (+3), uz `da`
-#: van veznika i rez ispred enklitike (+2). Ostaje "after".
+#: Veznici iz specifikacije. Strana preloma zavisi od OBLIKA (krugovi 20–21,
+#: `merenja/dnevnik.md`, mereno 2026-10-12 na 15 ASR poslova):
+#:
+#: * jedan red (`web`, `digital`): IZA veznika (`conjunction_side` "after").
+#:   `before` se tu čita 11 : 6 i diže rez iza predloga (3 -> 4) i kratke
+#:   cue-ove (33 -> 36) — u redu od par reči rez nema kuda da se pomeri.
+#: * dva reda (`tv`): ISPRED veznika (`conjunction_side_multiline`
+#:   "before"), kao engleski i francuski — `treba / da bude`. Čitanje 16 : 1
+#:   (bez ponovljenih snimaka 14 : 1). Viđena i prihvaćena granična
+#:   pogoršanja: jedan cue od 19 znakova pri granici 20 (u rečenici koja je
+#:   bolja) i jedan cue od 20,5 CPS pri granici 20.
+#:
+#: `da` izbačeno iz veznika (kao enklitika) nije prošlo ni u jednom obliku.
 SR_CONJUNCTIONS = frozenset({"i", "ali", "da", "jer", "pa", "te", "ili"})
 
 #: Enklitike pomoćnih glagola — ne smeju se odvojiti od participa/infinitiva.
@@ -317,6 +322,10 @@ class LanguageRules:
     #: "after" — srpski, iz specifikacije: `i / onda`.
     #: "before" — engleski i francuski lome ISPRED veznika: `old / and when`.
     conjunction_side: str = "after"
+    #: Strana veznika kad profil ima dva reda ili više (`max_lines >= 2`);
+    #: None = ista kao `conjunction_side`. Postoji zato što je strana veznika
+    #: i svojstvo oblika, ne samo jezika — vidi `SR_CONJUNCTIONS`.
+    conjunction_side_multiline: str | None = None
 
 
 LANGUAGE_RULES: dict[str, LanguageRules] = {
@@ -326,6 +335,7 @@ LANGUAGE_RULES: dict[str, LanguageRules] = {
         no_line_start=SR_CLITICS,
         conjunctions=SR_CONJUNCTIONS,
         adjective_suffixes=SR_ADJECTIVE_SUFFIXES,
+        conjunction_side_multiline="before",
     ),
     "en": LanguageRules(
         code="en",
@@ -418,6 +428,8 @@ class _Span:
     ) -> None:
         self.words = words
         self.profile = profile
+        if profile.max_lines >= 2 and rules.conjunction_side_multiline:
+            rules = replace(rules, conjunction_side=rules.conjunction_side_multiline)
         self.rules = rules
         #: pauza posle tokena k (`pauses.boundary_pauses`); None = bez zvuka
         self.pauses = pauses
