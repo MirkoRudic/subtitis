@@ -134,7 +134,7 @@
     <cite>pravilo struke</cite></div>
   <div style="flex:1;"></div>
   <div class="meta">
-    <div>Projektni dokument &middot; v1.4<br>Beograd, oktobar 2026.</div>
+    <div>Projektni dokument &middot; v1.5<br>Beograd, oktobar 2026.</div>
     <div class="r">Izradio Mirko Rudić<br>uz pomoć Claude Opus 5 (Anthropic)</div>
   </div>
 </div>
@@ -184,7 +184,7 @@
 <p>Sve radi na autorovom računaru. Nijedan zapis ne napušta mašinu, nema pretplate ni ograničenja minuta. To je bio uslov, ne posledica: materijal često sadrži izjave dece i korisnika socijalnih usluga, i slanje takvog zvuka trećoj strani nije dolazilo u obzir.</p>
 
 <div class="callout">
-<b>Ceo postupak izgradnje stoji u Prilogu A.</b> Jedan tekst koji se nalepi u agenta za pisanje koda u praznom folderu; iz njega nastaje sve opisano ovde, sa dvadeset šest zamki pronađenih merenjem — one se bez tog spiska plaćaju ponovo.
+<b>Ceo postupak izgradnje stoji u Prilogu A.</b> Jedan tekst koji se nalepi u agenta za pisanje koda u praznom folderu; iz njega nastaje sve opisano ovde, sa dvadeset devet zamki pronađenih merenjem — one se bez tog spiska plaćaju ponovo.
 </div>
 
 <div class="callout">
@@ -574,7 +574,7 @@ Jedina ćelija koja nije ponovljiva je ona sa oba uključena. Filter seče zapis
 <table class="spec">
   <tr><th>Profil</th><th class="num">Oblik</th><th class="num">Brzina</th><th class="num">Trajanje cue-a</th><th>Namena</th></tr>
   <tr><td><b>tv</b></td><td class="num">2 reda × 42 znaka</td><td class="num">20</td><td class="num">0,83 – 7,0 s</td><td>podrazumevani, klasičan titl</td></tr>
-  <tr><td><b>web</b></td><td class="num">1 red, 10–20 znakova</td><td class="num">20</td><td class="num">0,50 – 4,0 s</td><td>vertikalni video</td></tr>
+  <tr><td><b>web</b></td><td class="num">1 red, 14–28 znakova</td><td class="num">20</td><td class="num">0,50 – 4,0 s</td><td>vertikalni video</td></tr>
   <tr><td><b>digital</b></td><td class="num">isto kao <code>web</code></td><td class="num">20</td><td class="num">0,50 – 4,0 s</td><td>društvene mreže: VELIKA SLOVA, bez interpunkcije</td></tr>
 </table>
 
@@ -588,16 +588,78 @@ Jedina ćelija koja nije ponovljiva je ona sa oba uključena. Filter seče zapis
   <tr><th>Kazna</th><th>U jednorednom profilu</th></tr>
   <tr><td>jedna reč sama u redu</td><td><b>isključena</b> — to je normalno stanje, ne greška</td></tr>
   <tr><td>neravnoteža dva reda</td><td><b>isključena</b> — nema drugog reda</td></tr>
-  <tr><td>prekratak cue po znakovima</td><td><b>isključena</b> — dvadeset znakova je ceo cue</td></tr>
+  <tr><td>prekratak cue po znakovima</td><td><b>isključena</b> — ceo cue je kraći od praga te kazne</td></tr>
   <tr><td>enklitika na kraju ili početku reda</td><td><b>ostaje</b> — i dalje je prava greška, i vidljivija</td></tr>
 </table>
 
-<p>Umesto njih stoji <b>donja granica dužine reda</b> kao meka kazna, 30 po znaku ispod deset, uz izuzetak kad je cela rečenica kraća od granice. Izuzetak je prvo bio preširok — važio je za svaki poslednji komad rečenice, a taj je kratak upravo zato što je prethodni rez bio loš — pa je rečenica od 21 znaka izlazila kao <code>Čao, Borise, šta</code> i <code>ima?</code>. Suženje ga je spustilo sa 21 na 12 rečenica sa jednom rečju na kraju.</p>
+<p>Umesto njih stoji <b>donja granica dužine reda</b> kao meka kazna, 30 po znaku ispod donje granice profila, uz izuzetak kad je cela rečenica kraća od nje. Izuzetak je prvo bio preširok — važio je za svaki poslednji komad rečenice, a taj je kratak upravo zato što je prethodni rez bio loš — pa je rečenica od 21 znaka izlazila kao <code>Čao, Borise, šta</code> i <code>ima?</code>. Suženje ga je spustilo sa 21 na 12 rečenica sa jednom rečju na kraju.</p>
 
 <div class="callout warn">
 <b>Ravnomerna podela rečenice je merena i odbačena.</b> Očigledno rešenje za natpis od tri znaka jeste deliti rečenicu na jednake delove. Mehanizam je izgrađen i izmeren na trinaest poslova, sa četiri težine: menja sedam od pedeset devet rečenica, tri nabolje, dve nagore. Veće težine smanjuju broj kratkih redova, ali to plaćaju rezovima iza predloga (<code>vratili smo se do / kombija</code>) — najvidljivijom greškom u titlu, u jednorednom profilu vidljivijom nego inače, jer se dva dela pojavljuju u različitim trenucima.
 <br><br>
 Mehanizam je ostao u kodu, isključen, sa upisanim merenjem — i sa razlogom: udeo meri pogrešnu osovinu. Cue <code>Čao,</code> nije loš zbog broja znakova nego zato što traje 0,12 sekunde: tri frejma, natpis trepne i nestane. Kazna za cue kraći od najkraćeg trajanja profila je verovatno ono pravo, i stoji kao sledeća stavka.
+</div>
+
+<h3>Pauza u govoru — podatak koji izgleda da postoji, a nema ga</h3>
+
+<p>Kad prelom padne nasred misli, prvo što padne na pamet jeste da algoritam treba da gleda <b>tišinu</b> između reči: gde govornik zastane, tu je granica. Datoteka reči nosi početak i kraj svake reči, pa je pauza prosta razlika — podatak deluje kao da samo čeka da se upotrebi.</p>
+
+<div class="callout warn">
+<b>Razmak između reči je skoro uvek tačno nula.</b> Model ne ostavlja tišinu između reči nego je upija u trajanje susedne. Mereno na petnaest poslova: unutar rečenice, na granicama <i>bez interpunkcije</i> — dakle tamo gde bi pauza jedina nosila informaciju — <b>825 od 830 razmaka je tačno 0</b>. Razmak postoji samo uz zarez i na granici rečenica, gde je rez ionako besplatan. Svaki mehanizam koji računa razliku između kraja jedne i početka sledeće reči radi nad nulama i deluje kao da radi.
+</div>
+
+<p>Pauze u zvuku ipak postoje: detektor govora nalazi na snimku od 45 sekundi sedamnaest tišina od 0,16 do 1,82 sekunde, za trećinu sekunde obrade. One leže <i>unutar</i> raspona susedne reči, ne između reči. Zato se računaju iz zvuka jednom po poslu i čuvaju uz posao — datoteka preživljava brisanje radne kopije zvuka i nosi čime je napravljena. Posao koji nema ni nju ni zvuk prelama se kao i do sada, uz zapis u dnevniku.</p>
+
+<p>Sa tako dobijenim pauzama izmerena su tri mehanizma: kazna za cue koji u sebi sadrži pauzu, popust za rez na pauzi, i kazna za rez tamo gde pauze nema. Mreža od 36 tačaka, četiri praga, tri težine.</p>
+
+<div class="callout">
+<b>Nijedan nije uveden.</b> Kazna za pauzu unutar cue-a — zamišljena kao glavni mehanizam — cepa natpise na kraće, pa raste prekoračenje brzine čitanja ili broj prekratkih cue-ova. Popust za rez na pauzi prolazi po brojkama, ali čitanje promenjenih rečenica daje <b>4 bolje : 4 gore</b>, ispod zapisanog praga 3 : 1. Mehanizmi stoje u kodu sa težinama nula, sa upisanim merenjem; dok su isključeni, prelamanje zvuk ni ne čita.
+</div>
+
+<div class="callout warn">
+<b>Ono što pomaže dvorednom prelomu šteti jednorednom.</b> Isti nalaz u dva uzastopna merenja: pauza je u dvorednom profilu dala 4 : 1, u jednorednom 0 : 3; strana veznika 16 : 1 naspram 11 : 6. To nije slučajnost nego svojstvo oblika — u dva reda rez pada otprilike jednom po rečenici i ima izbora, u jednom redu pada na svake dve do tri reči i izbora nema. Zbirni odnos preko oba profila sakriva tu razliku i daje „nema efekta" tamo gde je istina „pomaže jednom, šteti drugom". <b>Rezultat se od tada čita po obliku odvojeno.</b>
+</div>
+
+<h3>Dvadeset znakova je bilo ispod praga na kom prelom ima izbora</h3>
+
+<p>Jednoredni profil je u prvoj verziji imao 10–20 znakova. To je oko tri reči srpskog, i na tolikom prostoru prelamanje nije biralo nego seklo gde je moralo. Sintagma duža od dvadeset znakova mora da se preseče, pa su se rezovi iza predloga i kroz složeni predikat javljali bez obzira na kazne — algoritam ih je plaćao zato što druge mogućnosti nije bilo.</p>
+
+<p>Mereno na petnaest poslova, četiri širine, uz srazmernu donju granicu:</p>
+
+<table class="spec">
+  <tr><th class="num">Znakova</th><th class="num">cue-ova</th><th class="num">rezova iza predloga</th><th class="num">kroz enklitiku</th><th class="num">ispod donje granice</th><th class="num">preko brzine čitanja</th></tr>
+  <tr><td class="num">20</td><td class="num">371</td><td class="num">3</td><td class="num">2</td><td class="num">33</td><td class="num"><b>52</b></td></tr>
+  <tr><td class="num"><b>24</b></td><td class="num">300</td><td class="num"><b>0</b></td><td class="num"><b>0</b></td><td class="num">18</td><td class="num">32</td></tr>
+  <tr><td class="num"><b>28</b></td><td class="num">261</td><td class="num">0</td><td class="num">0</td><td class="num">12</td><td class="num"><b>18</b></td></tr>
+  <tr><td class="num">32</td><td class="num">225</td><td class="num">0</td><td class="num">0</td><td class="num">3</td><td class="num">16</td></tr>
+</table>
+
+<p><b>Svi rezovi iza predloga i kroz enklitiku nestaju već na 24 znaka.</b> To nije podešavanje nego dokaz da je dvadeset bilo ispod praga na kom prelamanje uopšte ima izbor. Druga brojka je ozbiljnija: na dvadeset znakova je pedeset dva cue-a probijalo brzinu čitanja, dakle na svakom petom natpisu gledalac nije stizao da pročita.</p>
+
+<p>Izabrano je <b>28 znakova, donja granica 14</b>. Na 32 se dobijaju još dva prekoračenja manje, ali natpis postaje predug za vertikalni kadar — odluka o izgledu, ne o brojci.</p>
+
+<p class="muted small">Dva reda po 28 znakova daju još bolje brojke (183 cue-a, sedam prekoračenja brzine), ali to je drugi oblik natpisa i nije uvedeno. Merenje stoji u dnevniku.</p>
+
+<h3>Strana veznika zavisi od broja redova, ne samo od jezika</h3>
+
+<p>Prelom na vezniku je jeftin, ali pitanje je sa koje strane. Srpski je od prve specifikacije lomio <b>iza</b> veznika, i ta vrednost nikad nije bila merena; engleski je 25. septembra merenjem prebačen na „ispred" pošto je 26 od 92 reza padalo iza <code>and</code>/<code>so</code>.</p>
+
+<p>Merenje za srpski je pokazalo da odgovor nije isti za sve profile:</p>
+
+<table class="spec">
+  <tr><th>Oblik</th><th class="num">bolje : gore pri čitanju</th><th>Odluka</th></tr>
+  <tr><td>dva reda (<code>tv</code>)</td><td class="num">16 : 1</td><td>prelom <b>ispred</b> veznika</td></tr>
+  <tr><td>jedan red (<code>web</code>, <code>digital</code>)</td><td class="num">11 : 6</td><td>ostaje <b>iza</b> veznika</td></tr>
+</table>
+
+<p>U dvorednom prelomu <code>odlučili su da / krenu</code> postaje <code>odlučili su / da krenu</code>, a <code>spremili smo opremu i / sutra putujemo</code> postaje <code>spremili smo opremu / i sutra putujemo</code> — veznik uvodi ono što sledi, pa pripada donjem redu. U jednorednom profilu ista promena kvari više nego što popravlja, jer rez pada na svake dve do tri reči i izbora nema.</p>
+
+<div class="callout">
+<b>Pravilo je vezano za broj redova, ne za ime profila.</b> Nalaz je svojstvo oblika, pa stoji uz jezik kao dopunska vrednost koja važi kad profil ima dva ili više redova. Svaki budući dvoredni profil je dobija sam, bez upisivanja u svoj opis. Engleski i francuski se ne menjaju.
+</div>
+
+<div class="callout warn">
+<b>Kriterijum je i treći put umalo oborio dobru popravku.</b> Pravilo „nijedna mera ne sme da poraste" odbacilo je dvoredni prelom ispred veznika iako je čitanje dalo 16 : 1. Oborile su ga dve mere koje su porasle za jedan: cue od 19 znakova pri granici 20, i 20,5 znakova u sekundi pri granici 20. Prvi od ta dva je bio u rečenici ocenjenoj kao bolja. Oba su prihvaćena i zapisana uz konstantu, da se zna da su viđena.
 </div>
 
 <h3>Preimenovanje koje reciklira ime</h3>
@@ -983,7 +1045,7 @@ Mehanizam je ostao u kodu, isključen, sa upisanim merenjem — i sa razlogom: u
 </ul>
 
 <h2>Testovi</h2>
-<p>Hiljadu sto šezdeset automatskih testova pokriva <b>87% naredbi</b>, sa težištem na modulima gde je greška tiha: prelamanje, transliteracija, segmentacija, ekavizacija, spajanje elizija, provera odgovora modela.</p>
+<p>Hiljadu sto devedeset sedam automatskih testova pokriva <b>87% naredbi</b>, sa težištem na modulima gde je greška tiha: prelamanje, transliteracija, segmentacija, ekavizacija, spajanje elizija, provera odgovora modela.</p>
 
 <p>Nekoliko testova su brane koje pamte skupo plaćene nalaze. Najizrazitiji proverava da filter halucinacija nije vraćen među podrazumevane parametre, sa objašnjenjem u samom testu da je gutao rep zapisa i koštao 28% pokrivenosti.</p>
 
@@ -1076,6 +1138,8 @@ Popravka nije bila deljenje funkcije od 370 linija nego test koji podmeće <b>sa
   <tr><td>promena profila „ne radi"</td><td>kvar u prelamanju</td><td>radi, ali editor prikazuje rečenice a menja se titl</td></tr>
   <tr><td>ime profila nestaje posle prelamanja</td><td>greška u odgovoru servera</td><td>merilo je čitalo stanje stranice pre zamene</td></tr>
   <tr><td>glavna faza izgleda dobro pokrivena</td><td>hiljadu testova je dovoljno</td><td>pokrivenost te funkcije bila je 1% — broj testova nije merenje</td></tr>
+  <tr><td>prelom seče nasred misli</td><td>algoritam ne gleda pauze u govoru</td><td>razmak između reči je nula u 825 od 830 granica</td></tr>
+  <tr><td>popravka „nema efekta"</td><td>mehanizam ne valja</td><td>zbir preko dva oblika sakriva da jednom pomaže a drugom šteti</td></tr>
 </table>
 
 <div class="callout">
@@ -1133,15 +1197,18 @@ Popravka nije bila deljenje funkcije od 370 linija nego test koji podmeće <b>sa
   <tr><td>7</td><td>objašnjenja u interfejsu u dva sloja, stranica <i>Kako ovo radi</i>, uklanjanje starih napomena</td><td>alat upotrebljiv i nekome ko ga nije pravio</td></tr>
   <tr><td>8</td><td>glosar po projektu, otkrivanje izmišljenih reči, nova podela profila sa migracijom, izostavljanje interpunkcije, veličina slova</td><td>prepis otporan na curenje tuđih termina</td></tr>
   <tr><td>9</td><td>interfejs iz temelja: dva ulaza, baza projekata, prelom ispod rečenice, objašnjenja u prozorčiću, nijedna izmena ne čeka na dugme</td><td>alat koji se koristi bez objašnjavanja</td></tr>
+  <tr><td>10</td><td>period upotrebe: pauze izmerene i odbačene, strana veznika po obliku, širina jednorednog profila sa 20 na 28 znakova</td><td>prelom koji na vertikalnom videu ima izbor gde da padne</td></tr>
 </table>
 
 <p>Šesta faza nije bila planirana. Došla je iz konkretnog posla: titl na srpskom je već postojao, doteran u montaži, i trebalo ga je prevesti na francuski i engleski bez ijedne izmene vremena. Sve popravljeno posle nje — navodnici, numerisanje odlomaka, trajanje rečenice, detekcija neprevedenog, brisanje posla u toku — izašlo je na tom jednom poslu, u jedno popodne.</p>
 
-<p class="muted small">Stanje na dan ove verzije (v1.4): svih devet faza je završeno i aplikacija radi kao desktop alat sa ikonicom, bez vidljivog terminala. Oba toka — iz zvuka i iz gotovog titla — provereni su na stvarnim poslovima na srpskom, francuskom i engleskom, uključujući isporuku titla od 25 minuta na dva jezika. Hiljadu sto šezdeset testova prolazi, uz 87% pokrivenosti. Projekat je pod verzionisanjem, sa zaključanim verzijama zavisnosti.</p>
+<p class="muted small">Stanje na dan ove verzije (v1.5): svih deset faza je završeno i aplikacija radi kao desktop alat sa ikonicom, bez vidljivog terminala. Alat je javno objavljen pod MIT licencom. Oba toka — iz zvuka i iz gotovog titla — provereni su na stvarnim poslovima na srpskom, francuskom i engleskom, uključujući isporuku titla od 25 minuta na dva jezika. Hiljadu sto devedeset sedam testova prolazi, uz 87% pokrivenosti. Projekat je pod verzionisanjem, sa zaključanim verzijama zavisnosti.</p>
 
-<p>Sledeći korak nije nova funkcija nego <b>period stvarne upotrebe</b>: najmanje mesec dana redovnog rada, uz beleženje ne onoga što je model pogrešio — to je poznato — nego onoga što u interfejsu usporava korekturu. Prioritete određuju ti nalazi, ne unapred sastavljen spisak želja.</p>
+<p>Posle devete faze plan je bio <b>period stvarne upotrebe</b> umesto nove funkcije: beležiti ne ono što je model pogrešio — to je poznato — nego ono što u radu smeta. Deseta faza je ceo njegov učinak, i potvrđuje pravilo.</p>
 
-<p>Dosadašnje iskustvo to potvrđuje bez izuzetka: nijedan nalaz koji je oblikovao poslednje dve faze nije se mogao predvideti. Filter koji je gutao rep zapisa, sortiranje koje je pravilo jednorečne rečenice, navodnici koji su se prelivali između cue-ova, nabrajanje koje je model dodavao ispred rednog broja — sve je izašlo na prvom stvarnom poslu.</p>
+<p>Nijedan od tri nalaza nije bio na spisku želja. Povod je bio jedan loše prelomljen titl na vertikalnom videu. Očigledno objašnjenje — algoritam ne gleda pauze u govoru — bilo je tačno kao opis, ali podatak nije postojao: razmak između reči je nula. Drugo objašnjenje, strana veznika, pokazalo se tačnim samo za jedan oblik natpisa. A stvarni uzrok je bio najprostiji i niko ga nije tražio: <b>red od dvadeset znakova nije ostavljao prelamanju nijednu dobru mogućnost.</b></p>
+
+<p>Dosadašnje iskustvo to potvrđuje bez izuzetka: nijedan nalaz koji je oblikovao poslednje faze nije se mogao predvideti. Filter koji je gutao rep zapisa, sortiranje koje je pravilo jednorečne rečenice, navodnici koji su se prelivali između cue-ova, nabrajanje koje je model dodavao ispred rednog broja, razmak koji je uvek nula — sve je izašlo na stvarnom poslu.</p>
 
 </div>
 
@@ -1149,7 +1216,7 @@ Popravka nije bila deljenje funkcije od 370 linija nego test koji podmeće <b>sa
 <div class="section">
 <h1 id="s13">14. Rizici i otvorena pitanja za javnu verziju</h1>
 
-<p>Javna verzija — proizvod koji drugi koriste sami — odložena je za posle perioda stvarne upotrebe. Sledeća pitanja ostaju otvorena.</p>
+<p>Izvorni kod je objavljen pod MIT licencom, očišćen od svakog stvarnog materijala. Javna verzija kao <i>proizvod</i> — koji drugi postavljaju i koriste sami, bez poznavanja alata — i dalje je otvoreno pitanje. Sledeće stavke su njen glavni teret.</p>
 
 <p><b>Hardverski zahtev je glavna prepreka.</b> Kartica sa najmanje dvanaest gigabajta memorije je zahtev koji prosečan korisnik ne ispunjava, i on određuje sve ostale odluke o isporuci. Tri zaobilaženja, sa različitim posledicama:</p>
 <table class="spec">
@@ -1175,7 +1242,7 @@ Popravka nije bila deljenje funkcije od 370 linija nego test koji podmeće <b>sa
 
 <p><b>Održavanje sprege sa karticom.</b> Biblioteka za prepoznavanje i biblioteke kartice osetljive su na nadogradnje. Zaključane verzije su odlaganje, ne rešenje: svaka nadogradnja okruženja traži proveru.</p>
 
-<p class="muted" style="margin-top:14pt;">Dokument je zaključen kao verzija 1.4 i služi kao polazna tačka za dalji razvoj i za procenu proširenja u javni proizvod. Prilog A omogućava da se alat napravi ponovo na drugoj mašini.</p>
+<p class="muted" style="margin-top:14pt;">Dokument je zaključen kao verzija 1.5 i služi kao polazna tačka za dalji razvoj i za procenu proširenja u javni proizvod. Prilog A omogućava da se alat napravi ponovo na drugoj mašini.</p>
 
 </div>
 
@@ -1186,7 +1253,7 @@ Popravka nije bila deljenje funkcije od 370 linija nego test koji podmeće <b>sa
 
 <p>Ovaj prilog sadrži jedan tekst koji se nalepi u Claude Code (ili drugog agenta koji ume da piše datoteke i pokreće komande), u praznom projektnom folderu, kao prva poruka. Iz njega se ceo alat opisan u ovom dokumentu može napraviti ponovo.</p>
 
-<p>Prompt nije sažetak dokumenta. Dokument objašnjava <i>zašto</i> su odluke donete, a prompt sadrži <i>šta</i> treba napraviti, u obliku koji agent može da izvrši: strukturu projekta, sheme datoteka, sve izmerene konstante sa razlogom, osam faza sa tačkama zastoja, redosled postavljanja sa svim spoljnim zavisnostima, i — ono što je najvredniji deo — dvadeset šest zamki koje su u ovom projektu otkrivene merenjem, svaka sa objašnjenjem kako se ispoljava i koliko je koštala. Svaka od njih je u izgradnji potrošila najmanje jedno popodne.</p>
+<p>Prompt nije sažetak dokumenta. Dokument objašnjava <i>zašto</i> su odluke donete, a prompt sadrži <i>šta</i> treba napraviti, u obliku koji agent može da izvrši: strukturu projekta, sheme datoteka, sve izmerene konstante sa razlogom, osam faza sa tačkama zastoja, redosled postavljanja sa svim spoljnim zavisnostima, i — ono što je najvredniji deo — dvadeset devet zamki koje su u ovom projektu otkrivene merenjem, svaka sa objašnjenjem kako se ispoljava i koliko je koštala. Svaka od njih je u izgradnji potrošila najmanje jedno popodne.</p>
 
 <div class="callout">
 <b>Dva razloga zašto se prompt isplati pročitati i ako se alat ne pravi ponovo.</b> Prvo, zamke su jedini deo ovog projekta koji se ne može izvesti iz dokumentacije biblioteka — svaka je pronađena na stvarnom poslu i nijedna nije bila ni na jednom spisku želja. Drugo, pravilo rada koje stoji na početku prompta („merenje pobeđuje pretpostavku", sa izričitim uputstvom agentu da prvo proveri pa onda popravlja) pokazalo se važnijim za ishod od bilo koje pojedinačne tehničke odluke: osam puta je uverljivo objašnjenje kvara bilo pogrešno.
@@ -1222,6 +1289,10 @@ puta uverljivo objašnjenje kvara bilo pogrešno, a pravi uzrok drugde. Zato:
   reči, pet ponavljanja 20–52. To nije drugačija hipoteza nego nedovoljan uzorak.
   Svuda gde postoji temperatura — popuštanje posle neuspelog dekodiranja, svaki
   poziv jezičkom modelu — ponavljaj i javljaj raspon, ne jedan broj.
+- **Rezultat čitaj po obliku odvojeno.** Ono što pomaže dvorednom prelomu ume
+  da šteti jednorednom, i obrnuto: pauza je dala 4 : 1 u dvorednom i 0 : 3 u
+  jednorednom, strana veznika 16 : 1 naspram 11 : 6. Zbir preko oba oblika daje
+  „nema efekta" tamo gde je istina „pomaže jednom, šteti drugom".
 - Ne odbacuj popravku zato što nije dostigla proizvoljan cilj. Ako je bolja po
   sva tri merila, uzima se.
 
@@ -1460,6 +1531,29 @@ izjednačenju na onoj **najbližoj sredini**.
 &gt; zvuku. Obojene reči su pretežno kratke funkcijske reči na kojima je model
 &gt; nesiguran i kad ih tačno prepozna — prave greške su drugde.
 
+## Pauza u govoru — podatak koji izgleda da postoji
+
+&gt; **ZAMKA 29 — razmak između reči je skoro uvek tačno nula.**
+&gt; Kad prelom padne nasred misli, prvo rešenje koje se nameće jeste gledati
+&gt; tišinu između reči. Model je ne ostavlja: upija je u trajanje susedne reči.
+&gt; Mereno na 15 poslova, unutar rečenice i na granicama **bez interpunkcije** —
+&gt; dakle tamo gde bi pauza jedina nosila informaciju — **825 od 830 razmaka je
+&gt; tačno 0**. Razmak postoji samo uz zarez i na granici rečenica, gde je rez
+&gt; ionako besplatan. Svaki mehanizam koji računa `words[k+1].s − words[k].e`
+&gt; radi nad nulama i **deluje kao da radi**.
+
+Pauze u zvuku postoje i detektor govora ih nalazi pouzdano (17 tišina od 0,16
+do 1,82 s na 45 s snimka, za 0,3 s obrade), ali leže *unutar* raspona susedne
+reči. Ako ih uvodiš, računaj ih iz zvuka **jednom po poslu** i čuvaj uz posao:
+prelamanje mora da ostane trenutno, jer se pokreće na svaku promenu izbora, bez
+dugmeta. Datoteka sa tišinama preživljava brisanje radne kopije zvuka i nosi
+čime je napravljena; posao bez nje i bez zvuka prelama se kao i inače, uz zapis
+u dnevniku.
+
+Tri mehanizma su tako izmerena — kazna za cue koji sadrži pauzu, popust za rez
+na pauzi, kazna za rez bez pauze — i **nijedan nije uveden**: po brojkama
+prolazi samo popust, a čitanje daje 4 : 4. Stoje u kodu sa težinama nula.
+
 ## Reči bez zvuka iza sebe
 
 Postoji klasa izmišljenog teksta koju verovatnoća **ne vidi uopšte**. Na jednom
@@ -1510,6 +1604,16 @@ PENALTY_PER_CUE = 20
 MIN_ALIGNED_TOKEN_SHARE = 0.6
 ```
 
+&gt; **ZAMKA 28 — strana veznika nije svojstvo samo jezika nego i oblika.**
+&gt; Prelom na vezniku je jeftin, ali pitanje je sa koje strane. Srpski je u prvoj
+&gt; specifikaciji lomio IZA veznika i to nikad nije bilo mereno; engleski je
+&gt; merenjem prebačen na ISPRED (26 od 92 reza padalo je iza `and`/`so`).
+&gt; Merenje za srpski je dalo **različit odgovor po obliku**: u dva reda
+&gt; čitanje 16 : 1 za „ispred" (`odlučili su da / krenu` → `odlučili su / da
+&gt; krenu`), u jednom redu 11 : 6 — tamo rez pada na svake dve do tri reči i
+&gt; izbora nema. Zato pravilo veži za **broj redova**, kao dopunsku vrednost uz
+&gt; jezik, a ne za ime profila: svaki budući dvoredni profil je dobija sam.
+
 &gt; **ZAMKA 5 — tabele funkcijskih reči moraju biti po jeziku.** Srpska
 &gt; enklitika ne sme ni da počne red, dok engleski i francuski pomoćni glagoli
 &gt; slobodno počinju red (`he / is going`). U istom skupu bi engleski dobio
@@ -1525,7 +1629,7 @@ Profili kao JSON fajlovi:
 | Profil | oblik | brzina (CPS) | trajanje cue-a | izlaz |
 |---|---|---|---|---|
 | **tv** | 2 reda × 42 znaka | 20 | 0,83 – 7,0 s | kako jeste |
-| **web** | 1 red, 10–20 znakova | 20 | 0,50 – 4,0 s | kako jeste |
+| **web** | 1 red, 14–28 znakova | 20 | 0,50 – 4,0 s | kako jeste |
 | **digital** | isto kao `web` | 20 | 0,50 – 4,0 s | VELIKA SLOVA, bez interpunkcije |
 
 Ne pravi tri varijante istog (42 / 37 / 47 znakova u dva reda) — izbor među njima
@@ -1535,9 +1639,19 @@ Za jednoredni profil isključi tri kazne koje tamo mere nešto čega nema: jedna
 sama u redu, neravnoteža dva reda, prekratak cue po znakovima. Kazna za enklitiku
 **ostaje** i tamo je vidljivija nego inače, jer se dva dela sintagme pojavljuju u
 različitim trenucima. Umesto isključenih uvedi **donju granicu dužine reda** kao
-meku kaznu (30 po znaku ispod 10), sa izuzetkom **samo kad je cela rečenica kraća
-od granice** — ne kad je kratak ostatak posle reza, inače svaki poslednji komad
-rečenice prolazi bez kazne i dobijaš natpis od tri znaka.
+meku kaznu (30 po znaku ispod donje granice profila), sa izuzetkom **samo kad je
+cela rečenica kraća od granice** — ne kad je kratak ostatak posle reza, inače
+svaki poslednji komad rečenice prolazi bez kazne i dobijaš natpis od tri znaka.
+
+&gt; **ZAMKA 27 — premali red nije strog profil nego ukinut izbor.**
+&gt; Jednoredni profil je prvo imao 20 znakova, oko tri reči srpskog. Na tolikom
+&gt; prostoru prelamanje ne bira nego seče gde mora, pa se rezovi iza predloga i
+&gt; kroz složeni predikat javljaju **bez obzira na kazne** — algoritam ih plaća
+&gt; jer druge mogućnosti nema. Mereno na 15 poslova: na 20 znakova 3 reza iza
+&gt; predloga, 2 kroz enklitiku, **52 cue-a preko brzine čitanja**; već na 24
+&gt; znaka prva dva su **nula**, a na 28 je prekoračenja brzine 18.
+&gt; Ako kazne ne pomažu, proveri da li uopšte postoji prostor u kome bi mogle da
+&gt; deluju, pre nego što dodaješ nove.
 
 Promena profila ne pokreće nikakvu ponovnu obradu — samo regeneriše SRT iz
 sačuvanih rečenica. Prikaži kojim je profilom napravljen postojeći fajl.

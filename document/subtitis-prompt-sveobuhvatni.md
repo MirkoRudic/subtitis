@@ -25,6 +25,10 @@ puta uverljivo objašnjenje kvara bilo pogrešno, a pravi uzrok drugde. Zato:
   reči, pet ponavljanja 20–52. To nije drugačija hipoteza nego nedovoljan uzorak.
   Svuda gde postoji temperatura — popuštanje posle neuspelog dekodiranja, svaki
   poziv jezičkom modelu — ponavljaj i javljaj raspon, ne jedan broj.
+- **Rezultat čitaj po obliku odvojeno.** Ono što pomaže dvorednom prelomu ume
+  da šteti jednorednom, i obrnuto: pauza je dala 4 : 1 u dvorednom i 0 : 3 u
+  jednorednom, strana veznika 16 : 1 naspram 11 : 6. Zbir preko oba oblika daje
+  „nema efekta" tamo gde je istina „pomaže jednom, šteti drugom".
 - Ne odbacuj popravku zato što nije dostigla proizvoljan cilj. Ako je bolja po
   sva tri merila, uzima se.
 
@@ -263,6 +267,29 @@ izjednačenju na onoj **najbližoj sredini**.
 > zvuku. Obojene reči su pretežno kratke funkcijske reči na kojima je model
 > nesiguran i kad ih tačno prepozna — prave greške su drugde.
 
+## Pauza u govoru — podatak koji izgleda da postoji
+
+> **ZAMKA 29 — razmak između reči je skoro uvek tačno nula.**
+> Kad prelom padne nasred misli, prvo rešenje koje se nameće jeste gledati
+> tišinu između reči. Model je ne ostavlja: upija je u trajanje susedne reči.
+> Mereno na 15 poslova, unutar rečenice i na granicama **bez interpunkcije** —
+> dakle tamo gde bi pauza jedina nosila informaciju — **825 od 830 razmaka je
+> tačno 0**. Razmak postoji samo uz zarez i na granici rečenica, gde je rez
+> ionako besplatan. Svaki mehanizam koji računa `words[k+1].s − words[k].e`
+> radi nad nulama i **deluje kao da radi**.
+
+Pauze u zvuku postoje i detektor govora ih nalazi pouzdano (17 tišina od 0,16
+do 1,82 s na 45 s snimka, za 0,3 s obrade), ali leže *unutar* raspona susedne
+reči. Ako ih uvodiš, računaj ih iz zvuka **jednom po poslu** i čuvaj uz posao:
+prelamanje mora da ostane trenutno, jer se pokreće na svaku promenu izbora, bez
+dugmeta. Datoteka sa tišinama preživljava brisanje radne kopije zvuka i nosi
+čime je napravljena; posao bez nje i bez zvuka prelama se kao i inače, uz zapis
+u dnevniku.
+
+Tri mehanizma su tako izmerena — kazna za cue koji sadrži pauzu, popust za rez
+na pauzi, kazna za rez bez pauze — i **nijedan nije uveden**: po brojkama
+prolazi samo popust, a čitanje daje 4 : 4. Stoje u kodu sa težinama nula.
+
 ## Reči bez zvuka iza sebe
 
 Postoji klasa izmišljenog teksta koju verovatnoća **ne vidi uopšte**. Na jednom
@@ -313,6 +340,16 @@ PENALTY_PER_CUE = 20
 MIN_ALIGNED_TOKEN_SHARE = 0.6
 ```
 
+> **ZAMKA 28 — strana veznika nije svojstvo samo jezika nego i oblika.**
+> Prelom na vezniku je jeftin, ali pitanje je sa koje strane. Srpski je u prvoj
+> specifikaciji lomio IZA veznika i to nikad nije bilo mereno; engleski je
+> merenjem prebačen na ISPRED (26 od 92 reza padalo je iza `and`/`so`).
+> Merenje za srpski je dalo **različit odgovor po obliku**: u dva reda
+> čitanje 16 : 1 za „ispred" (`odlučili su da / krenu` → `odlučili su / da
+> krenu`), u jednom redu 11 : 6 — tamo rez pada na svake dve do tri reči i
+> izbora nema. Zato pravilo veži za **broj redova**, kao dopunsku vrednost uz
+> jezik, a ne za ime profila: svaki budući dvoredni profil je dobija sam.
+
 > **ZAMKA 5 — tabele funkcijskih reči moraju biti po jeziku.** Srpska
 > enklitika ne sme ni da počne red, dok engleski i francuski pomoćni glagoli
 > slobodno počinju red (`he / is going`). U istom skupu bi engleski dobio
@@ -328,7 +365,7 @@ Profili kao JSON fajlovi:
 | Profil | oblik | brzina (CPS) | trajanje cue-a | izlaz |
 |---|---|---|---|---|
 | **tv** | 2 reda × 42 znaka | 20 | 0,83 – 7,0 s | kako jeste |
-| **web** | 1 red, 10–20 znakova | 20 | 0,50 – 4,0 s | kako jeste |
+| **web** | 1 red, 14–28 znakova | 20 | 0,50 – 4,0 s | kako jeste |
 | **digital** | isto kao `web` | 20 | 0,50 – 4,0 s | VELIKA SLOVA, bez interpunkcije |
 
 Ne pravi tri varijante istog (42 / 37 / 47 znakova u dva reda) — izbor među njima
@@ -338,9 +375,19 @@ Za jednoredni profil isključi tri kazne koje tamo mere nešto čega nema: jedna
 sama u redu, neravnoteža dva reda, prekratak cue po znakovima. Kazna za enklitiku
 **ostaje** i tamo je vidljivija nego inače, jer se dva dela sintagme pojavljuju u
 različitim trenucima. Umesto isključenih uvedi **donju granicu dužine reda** kao
-meku kaznu (30 po znaku ispod 10), sa izuzetkom **samo kad je cela rečenica kraća
-od granice** — ne kad je kratak ostatak posle reza, inače svaki poslednji komad
-rečenice prolazi bez kazne i dobijaš natpis od tri znaka.
+meku kaznu (30 po znaku ispod donje granice profila), sa izuzetkom **samo kad je
+cela rečenica kraća od granice** — ne kad je kratak ostatak posle reza, inače
+svaki poslednji komad rečenice prolazi bez kazne i dobijaš natpis od tri znaka.
+
+> **ZAMKA 27 — premali red nije strog profil nego ukinut izbor.**
+> Jednoredni profil je prvo imao 20 znakova, oko tri reči srpskog. Na tolikom
+> prostoru prelamanje ne bira nego seče gde mora, pa se rezovi iza predloga i
+> kroz složeni predikat javljaju **bez obzira na kazne** — algoritam ih plaća
+> jer druge mogućnosti nema. Mereno na 15 poslova: na 20 znakova 3 reza iza
+> predloga, 2 kroz enklitiku, **52 cue-a preko brzine čitanja**; već na 24
+> znaka prva dva su **nula**, a na 28 je prekoračenja brzine 18.
+> Ako kazne ne pomažu, proveri da li uopšte postoji prostor u kome bi mogle da
+> deluju, pre nego što dodaješ nove.
 
 Promena profila ne pokreće nikakvu ponovnu obradu — samo regeneriše SRT iz
 sačuvanih rečenica. Prikaži kojim je profilom napravljen postojeći fajl.
