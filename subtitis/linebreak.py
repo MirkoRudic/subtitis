@@ -112,6 +112,51 @@ PENALTY_BELOW_MIN_CHARS = 30
 #: merenje, kao `fixedcues.SRT_MAX_GAP`.
 PENALTY_CUE_SHARE_DEVIATION = 0
 
+# --- Pauza u govoru (krug 19) ----------------------------------------------
+# Tišine dolaze iz zvuka (`pauses.py`, Silero VAD), ne iz razmaka između reči
+# u `words.json` — taj je na granici bez interpunkcije tačno 0 u 825 od 830
+# slučajeva. Važe samo za prelamanje izvornog jezika sa pravim vremenima;
+# prevod i uvoz gotovog SRT-a nemaju zvuk po rečima i rade kao ranije.
+#
+# SVE ISKLJUČENO, mereno (krug 19, `merenja/dnevnik.md`, 2026-10-12): na 15
+# ASR poslova (13 sa zvukom), mreža prag 0,12/0,20/0,30/0,45 s × težina
+# 50/100/200 × popust 25/50. Kazna za pauzu u cue-u ni u jednoj tački ne
+# prolazi kriterijum zapisan pre merenja — cepa natpise, pa rastu
+# prekoračenja CPS-a (`tv` 3 -> 4–5) ili kratki cue-ovi (`web` +1–2). Prolazi
+# samo popust; najbolji (prag 0,30, popust 50) menja 10 rečenica: 4 bolje,
+# 4 gore, 2 neutralne — u `tv` 4 : 1, u jednorednom `web` 0 : 3. Ispod
+# traženih 3 : 1, pa se ne uvodi. Mehanizam ostaje za ponovno merenje, kao
+# `PENALTY_CUE_SHARE_DEVIATION`; `pauses.json` se svejedno čuva pri
+# prepoznavanju govora, jer posle brisanja zvuka tišina više nema odakle.
+
+#: Tišina od ovoliko sekundi naviše je pauza. 0,30 je jedini prag na kome je
+#: popust prošao kriterijum u sva tri profila sa padom većim od jednog cue-a.
+PAUSE_MIN = 0.30
+
+#: Po sekundi najveće pauze iznad `PAUSE_MIN` unutar cue-a: u isti natpis su
+#: spojene reči koje govornik nije izgovorio u dahu. Najviše
+#: `PENALTY_PAUSE_IN_CUE_MAX` — reda veličine `PENALTY_BREAK_NOT_AT_CLAUSE`,
+#: nikad reda kazne za predlog, enklitiku ili termin (300): govornik ume da
+#: udahne usred sintagme, i `u / kuću` ostaje gore od pauze u natpisu.
+#: ISKLJUČENO: nijedna težina nije prošla kriterijum (vidi gore).
+PENALTY_PAUSE_IN_CUE = 0
+PENALTY_PAUSE_IN_CUE_MAX = 50
+
+#: Popust na `PENALTY_BREAK_NOT_AT_CLAUSE` za rez na pauzi: pauza je granica
+#: klauze, samo čujna umesto pisane. Ne dira kazne za predlog i ostale.
+#: ISKLJUČENO: 50 prolazi brojke, ali ne i čitanje (4 : 4).
+PAUSE_BREAK_DISCOUNT = 0
+
+#: Kazna za rez van klauze BEZ pauze — ista informacija gledana naopako.
+#: ISKLJUČENO: uz popust 50 dodaje 1 cue manje sa pauzom, a diže CPS (`tv`)
+#: i kratke cue-ove (`web`).
+PENALTY_BREAK_WITHOUT_PAUSE = 0
+
+
+def pauses_enabled() -> bool:
+    """Da li prelamanje uopšte koristi pauze — bez toga se zvuk ne čita."""
+    return bool(PENALTY_PAUSE_IN_CUE or PAUSE_BREAK_DISCOUNT or PENALTY_BREAK_WITHOUT_PAUSE)
+
 #: Gornja granica pretrage — koliko puta više znakova od kapaciteta cue-a
 #: sme da uđe u kandidat-raspon. Samo ograničava DP, ne utiče na izbor.
 SEARCH_WIDTH_FACTOR = 1.6
@@ -140,7 +185,14 @@ SR_PREPOSITIONS = frozenset({
 #: glagolom (`ne možemo`): kao predlog, ne sme da ZAVRŠI red (krug 7).
 SR_NEGATION = frozenset({"ne"})
 
-#: Veznici iz specifikacije.
+#: Veznici iz specifikacije. Srpski lomi IZA veznika (`conjunction_side`
+#: "after"). Mereno 2026-10-12 (krug 20, `merenja/dnevnik.md`) na 15 ASR
+#: poslova: rez iza veznika 33 od 122 u `tv`, 41 od 301 u `web`/`digital`.
+#: `before` (kao engleski) i `before` sa `da` u `no_line_end` (i uz to `pa`,
+#: `te`) čitaju se bolje u `tv` (14 : 1), ali ne u `web`/`digital` (11 : 6), i
+#: svaka podiže bar jednu meru koja ne sme da poraste — u `tv` kratak cue i
+#: CPS (+1, +1), u `web` rez iza predloga (+1) i kratke cue-ove (+3), uz `da`
+#: van veznika i rez ispred enklitike (+2). Ostaje "after".
 SR_CONJUNCTIONS = frozenset({"i", "ali", "da", "jer", "pa", "te", "ili"})
 
 #: Enklitike pomoćnih glagola — ne smeju se odvojiti od participa/infinitiva.
@@ -362,11 +414,13 @@ class _Span:
 
     def __init__(
         self, words: list[Word], profile: Profile, rules: LanguageRules = GENERIC_RULES,
-        terms: list[list[str]] | None = None,
+        terms: list[list[str]] | None = None, pauses: list[float] | None = None,
     ) -> None:
         self.words = words
         self.profile = profile
         self.rules = rules
+        #: pauza posle tokena k (`pauses.boundary_pauses`); None = bez zvuka
+        self.pauses = pauses
         n = len(words)
         self.n = n
 
@@ -455,6 +509,11 @@ class _Span:
             pen = float(PENALTY_BREAK_AFTER_CONJUNCTION)
         else:
             pen = float(PENALTY_BREAK_NOT_AT_CLAUSE)
+            if self.pauses is not None:
+                if self.pauses[k] >= PAUSE_MIN:
+                    pen = max(0.0, pen - PAUSE_BREAK_DISCOUNT)
+                else:
+                    pen += PENALTY_BREAK_WITHOUT_PAUSE
 
         left = _norm(tok)
         right = _norm(nxt)
@@ -614,21 +673,35 @@ def _best_lines(span: _Span, i: int, j: int) -> tuple[float, list[int]]:
 # ==========================================================================
 
 
+def pause_in_cue_penalty(pause: float) -> float:
+    """Kazna za cue čija je najveća unutrašnja pauza `pause` sekundi."""
+    if not PENALTY_PAUSE_IN_CUE or pause < PAUSE_MIN:
+        return 0.0
+    return min(PENALTY_PAUSE_IN_CUE * (pause - PAUSE_MIN), PENALTY_PAUSE_IN_CUE_MAX)
+
+
 def layout_sentence(
     words: list[Word], profile: Profile, sentence_id: int | None = None,
     flags: list[str] | None = None, rules: LanguageRules | None = None,
     terms: list[list[str]] | None = None,
+    silences: list[tuple[float, float]] | None = None,
 ) -> list[Cue]:
     """Prelomi jednu rečenicu (njene reči) u cue-ove.
 
     `rules` podrazumevano srpski — to je izvorni jezik alata. Za prevedene
-    rečenice `build_cues` prosleđuje tabelu ciljnog jezika.
+    rečenice `build_cues` prosleđuje tabelu ciljnog jezika. `silences` su
+    tišine iz zvuka (`pauses.py`); bez njih se pauza ne uzima u obzir.
     """
     words = [w for w in words if w.w.strip()]
     if not words:
         return []
 
-    span = _Span(words, profile, rules or LANGUAGE_RULES["sr"], terms)
+    pauses = None
+    if silences is not None:
+        from .pauses import boundary_pauses
+
+        pauses = boundary_pauses(words, silences)
+    span = _Span(words, profile, rules or LANGUAGE_RULES["sr"], terms, pauses)
     n = span.n
     capacity = profile.max_chars_per_line * profile.max_lines
     max_search = capacity * SEARCH_WIDTH_FACTOR
@@ -636,7 +709,10 @@ def layout_sentence(
     # Svi dozvoljeni cue-ovi [i, j) sa troškom koji zavisi samo od njih.
     edges: list[list[tuple[int, float, list[int]]]] = [[] for _ in range(n)]
     for i in range(n - 1, -1, -1):
+        inner_pause = 0.0  # najveća pauza na granicama unutar [i, j)
         for j in range(i + 1, n + 1):
+            if pauses is not None and j - 2 >= i:
+                inner_pause = max(inner_pause, pauses[j - 2])
             if j - i > 1 and span.length(i, j) > max_search:
                 break
             if j < n and span.break_pen[j - 1] >= INF:
@@ -660,6 +736,7 @@ def layout_sentence(
                 and chars < MIN_CUE_CHARS
             ):
                 cost += (MIN_CUE_CHARS - chars) * PENALTY_SHORT_CUE
+            cost += pause_in_cue_penalty(inner_pause)
             if j < n:
                 cost += span.break_pen[j - 1]
             edges[i].append((j, cost, cuts))
@@ -841,11 +918,15 @@ def build_cues(
     log: Callable[[str], None] | None = None,
     interpolate_times: bool = False,
     glossary_terms: list[str] | None = None,
+    silences: list[tuple[float, float]] | None = None,
 ) -> list[Cue]:
     """Ceo posao: rečenice + reči -> gotovi cue-ovi sa primenjenim ograničenjima.
 
     `language` bira tabelu funkcijskih reči. Bez toga bi se na engleskom i
     francuskom primenjivale srpske liste, pa bi prelom padao iza `the`.
+
+    `silences` (tišine iz zvuka, `pauses.py`) važe samo uz prava vremena reči;
+    uz `interpolate_times` se ne koriste — izmišljena vremena nemaju pauze.
 
     Rečenice čije poravnanje degradira dobijaju flag `alignment_degraded`
     (i na rečenici i na cue-ovima) i upozorenje kroz `log`.
@@ -887,7 +968,7 @@ def build_cues(
                 f"(prag {MIN_ALIGNED_TOKEN_SHARE:.0%}). Vremena u ovoj rečenici "
                 f"su uglavnom interpolirana. Tekst: {sent.text[:80]!r}"
             )
-        cues.extend(layout_sentence(sw, profile, sent.id, flags, rules, terms))
+        cues.extend(layout_sentence(sw, profile, sent.id, flags, rules, terms, silences))
     return apply_timing(cues, profile)
 
 

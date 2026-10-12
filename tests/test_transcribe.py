@@ -250,3 +250,25 @@ def test_prazan_rezultat_je_greska(lazno):
 def test_ulaz_koji_ne_postoji(lazno, tmp_path):
     with pytest.raises(SubtitisError, match="Ulazna datoteka ne postoji"):
         pipeline.run_transcribe(tmp_path / "nema.mp4", "sr", job_id="p")
+
+
+def test_tisine_se_cuvaju_dok_zvuk_postoji(lazno, monkeypatch):
+    """Krug 19: `pauses.json` se pravi pri prepoznavanju — posle roka zvuka više nema."""
+    from subtitis import pauses
+
+    monkeypatch.setattr(pauses, "detect", lambda wav: pauses.PausesFile(
+        made_with={"vad": "silero"}, silences=[(1.0, 1.4), (5.0, 5.6)]))
+    lazno["words"] = reci(SR_BEZ_ZNAKOVA)
+    r, jdir, log, logs = pokreni(lazno, "sr")
+    assert pauses.load("p").silences == [(1.0, 1.4), (5.0, 5.6)]
+    assert "pauze: 2 tišine iz source.wav u pauses.json." in log
+
+
+def test_tisine_koje_se_ne_mogu_izmeriti_ne_obaraju_posao(lazno):
+    """Lažni `source.wav` nije zvuk: posao ide dalje, bez `pauses.json`."""
+    from subtitis import pauses
+
+    lazno["words"] = reci(SR_BEZ_ZNAKOVA)
+    r, jdir, log, logs = pokreni(lazno, "sr")
+    assert cfg.load_job("p").status == "transcribed"
+    assert pauses.load("p") is None and "prelamanje bez pauza" in log

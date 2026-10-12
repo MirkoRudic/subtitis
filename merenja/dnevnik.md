@@ -369,3 +369,184 @@ ne blokira kucanje; vreme koje pregledač troši na zamenu ~1700 delova
 strane nije mereno (nema pregledača u ovom okruženju). Skripta:
 `scratchpad` sesije, nije u repozitorijumu — merenje se ponavlja sa
 `/rebuild` nad kopijom projekta.
+
+## 2026-10-12 — Razmak između reči u `words.json` je skoro uvek nula
+
+Whisper (faster-whisper, `word_timestamps`, bez VAD-a) ne ostavlja tišinu
+između reči: kraj jedne reči je početak sledeće, a tišina se upija u trajanje
+susedne reči (`u` od 0,72 s, `kada` od 0,96 s). Izmereno na 15 ASR poslova
+(`scripts/krug19_pauze.py`), pauza = `s` sledeće reči − `e` prethodne,
+preskačući tokene interpunkcije:
+
+| granica | ukupno | ≥ 0,05 s | ≥ 0,12 | ≥ 0,20 | ≥ 0,30 | ≥ 0,45 | tačno 0 |
+|---|---|---|---|---|---|---|---|
+| unutar rečenice, bez interpunkcije | 830 | 5 | 5 | 4 | 1 | 1 | **825** |
+| unutar rečenice, uz zarez | 119 | 99 | 55 | 15 | 8 | 5 | 1 |
+| između rečenica | 55 | 43 | 36 | 24 | 21 | 16 | 11 |
+
+Razmak postoji samo uz interpunkciju — gde je rez ionako besplatan. Na
+granici bez znaka, gde bi pauza jedina nosila informaciju, **825 od 830
+razmaka je tačno 0**. Svaki mehanizam koji čita `words[k+1].s − words[k].e`
+radi nad nulama:
+
+- `segment._split_long` (`HARD_SPLIT_MIN_PAUSE` 0,7 s) — pri sečenju
+  predugačke rečenice bez zareza pauzu praktično nikad ne vidi; to i komentar
+  u kodu beleži („u govoru bez interpunkcije su sve pauze jednake"). Nije
+  menjano u krugu 19.
+- `fixedcues.SRT_MAX_GAP` (izmereno 2026-09-28, isključeno) **nije** pogođen:
+  meren je na razmacima između cue-ova uvezenog SRT-a koji je napravio čovek,
+  ne na razmacima Whisper-ovih reči. Njegov zaključak važi — ali za granicu
+  rečenice u tuđem SRT-u, ne za pauzu u govoru.
+
+Pauze postoje u zvuku: Silero VAD (isti koji `asr.py` koristi za probu) na
+45 s snimka nalazi 17 tišina od 0,16 do 1,82 s, za 0,3 s obrade; leže
+unutar Whisper-ovog raspona susedne reči, ne između reči.
+
+## 2026-10-12 — Krug 19: pauza kao signal za prelom — kriterijum (zapisan pre merenja)
+
+Izvor pauza: Silero VAD nad `source.wav`, jednom po poslu, u
+`jobs/<id>/pauses.json` (preživljava brisanje zvuka). Pauza se pripisuje
+granici dve reči koja leži u tišini ili joj je najbliža.
+
+Mehanizmi: (1) kazna za cue koji sadrži pauzu iznad praga, srazmerna
+najvećoj takvoj pauzi; (2) popust na `PENALTY_BREAK_NOT_AT_CLAUSE` za rez na
+pauzi; (3) kazna za rez bez pauze — samo meren. Mreža: prag 0,12 / 0,20 /
+0,30 / 0,45 s; težina (1) 50 / 100 / 200 po sekundi iznad praga, najviše 50;
+popust (2) 0 / 25 / 50. Mereno na 15 ASR poslova, profili `tv`, `web`,
+`digital`.
+
+Kriterijum prihvatanja, unapred:
+
+1. U svakom profilu, u odnosu na stanje bez pauza, **ne sme da poraste**:
+   broj rezova iza predloga, broj rezova ispred enklitike, broj cue-ova ispod
+   donje granice znakova (`min_chars_per_line`, a gde je nema `MIN_CUE_CHARS`;
+   cela rečenica u jednom cue-u se ne broji), broj cue-ova preko `max_cps` i
+   broj redova preko `max_chars_per_line`.
+2. Broj cue-ova koji sadrže pauzu iznad praga **mora da padne** u svakom
+   profilu.
+3. Od konfiguracija koje ispunjavaju 1 i 2 bira se ona sa najvećim padom iz
+   tačke 2; pri izjednačenju manje težine. Tek tada se čitaju sve rečenice
+   koje su se promenile i svaka se ocenjuje kao bolja, gora ili neutralna.
+   **Ako je odnos bolje : gore lošiji od 3 : 1, mehanizam se ne uvodi** i to
+   se javlja — ne podešava se dalje dok brojka ne bude lepa.
+4. Mehanizam (3) se uvodi samo ako uz (1)+(2) dodatno spusti broj cue-ova sa
+   pauzom za bar 10 % i ne pokvari nijednu meru iz tačke 1.
+
+## 2026-10-12 — Krug 19: rezultat — pauza se ne uvodi
+
+Mereno `scripts/krug19_pauze.py meri` na 15 ASR poslova; 13 imaju zvuk, 2 su
+ga izgubili po roku i rade bez pauza (to je i slučaj „nema ni `pauses.json`
+ni zvuka"). Tišine su računate u memoriji — u poslove nije upisan nijedan
+`pauses.json`. `web` i `digital` se prelamaju isto, pa su im brojke iste.
+
+Stanje bez pauza i izabrana tačka (prag 0,30 s, samo popust 50); u zagradi
+je razlika:
+
+| profil | cue-ova | sa pauzom ≥ 0,30 | iza predloga | ispred enklitike | ispod granice | preko CPS | red preko |
+|---|---|---|---|---|---|---|---|
+| `tv` bez | 126 | 50 | 0 | 0 | 2 | 3 | 0 |
+| `tv` sa | 131 | 49 (−1) | 0 | 0 | 2 | 3 | 0 |
+| `web` bez | 371 | 47 | 3 | 2 | 33 | 52 | 0 |
+| `web` sa | 372 | 42 (−5) | 3 | 2 | 33 | 52 | 0 |
+| `digital` bez | 371 | 47 | 3 | 2 | 33 | 52 | 0 |
+| `digital` sa | 372 | 42 (−5) | 3 | 2 | 33 | 52 | 0 |
+
+**Kazna za pauzu u cue-u** (mehanizam 1, zamišljen kao glavni) ni u jednoj
+od 36 tačaka ne prolazi kriterijum u sva tri profila: smanjuje broj cue-ova
+sa pauzom najviše (prag 0,12, težina 200 uz popust 50: `tv` 71 -> 47), ali cepa natpise
+na kraće, pa raste prekoračenje CPS-a (`tv` 3 -> 4–5) ili broj kratkih
+cue-ova (`web` 33 -> 34–35). Kriterijum prolazi samo **popust** za rez na
+pauzi (mehanizam 2), a najveći pad (ukupno −11) daje prag 0,30 uz popust 50.
+**Kazna za rez bez pauze** (mehanizam 3) uz to dodaje jedan cue manje sa
+pauzom i diže CPS u `tv` (3 -> 4) i kratke cue-ove u `web` (33 -> 34–37) —
+ne prolazi.
+
+Čitanje izabrane tačke: promenjeno 10 rečenica (6 u `tv`, 4 u `web`, iste u
+`digital`). `tv`: 4 bolje (nestaju rezovi između glagola i objekta, kroz
+imeničku sintagmu i između prideva i imenice preko granice natpisa), 1 gora
+(rez kroz priloški izraz), 1 neutralna. `web`: 0 boljih, 3 gore (zamenica
+otcepljena od svog glagola preko zareza, `kao / i` presečeno, jedna reč sama
+u natpisu), 1 neutralna. Ukupno **4 bolje : 4 gore** — ispod 3 : 1, pa se
+po kriterijumu **ne uvodi**, i ne podešava dalje.
+
+Šta ostaje u kodu: `pauses.py` (tišine iz zvuka, `pauses.json` pri
+prepoznavanju govora, jer posle brisanja zvuka tišina nema odakle) i
+mehanizmi u `linebreak.py` sa težinama 0 (`pauses_enabled()` je False, pa
+prelamanje zvuk ni ne čita). Zapažanje za sledeće merenje, ne zaključak:
+u dvorednom `tv` je odnos bio 4 : 1, u jednorednom 0 : 3 — u jednom redu
+od 20 znakova pauza retko pada tamo gde ima mesta za rez.
+
+## 2026-10-12 — Krug 20: strana veznika u srpskom — kriterijum (zapisan pre merenja)
+
+Povod: u krugu 19 je pauza u dvorednom `tv` bila 4 : 1, a u jednorednom
+`web`/`digital` 0 : 3 — a loši prelomi zbog kojih je tražena (rez iza `da` u
+složenom predikatu, rez iza `i` pred nastavkom misli) su iz `digital` i oba su
+rez IZA veznika, koji
+srpski naplaćuje samo 10 (`conjunction_side = "after"`, iz prve
+specifikacije, nikad mereno). Engleski je na `before` prebačen merenjem
+(2026-09-25).
+
+Varijante, na 15 srpskih ASR poslova, profili `tv`, `web`, `digital`:
+
+1. `after` — sadašnje stanje;
+2. `before` — kao engleski i francuski;
+3. `before`, a `da` izbačeno iz veznika i stavljeno u `no_line_end`
+   (u `moramo da krenemo` je deo predikata, ponaša se kao enklitika);
+4. kao 3, a uz `da` isto i `pa` i `te`.
+
+Kriterijum prihvatanja, unapred — isti kao u krugu 19:
+
+1. U svakom profilu, u odnosu na `after`, **ne sme da poraste**: broj rezova
+   iza predloga, broj rezova ispred enklitike, broj cue-ova ispod donje
+   granice znakova (cela rečenica u jednom cue-u se ne broji), broj cue-ova
+   preko `max_cps` i broj redova preko `max_chars_per_line`. Rezovi iza i
+   ispred veznika se prikazuju bez suda.
+2. Promenjene rečenice se čitaju **po profilu odvojeno** (`tv` posebno,
+   `web`/`digital` posebno — prelamaju se isto) i svaka se ocenjuje kao
+   bolja, gora ili neutralna. Varijanta prolazi samo ako je **u obe grupe**
+   odnos bolje : gore bar **3 : 1**. Broj promenjenih rezova ne meri
+   kvalitet.
+3. Od varijanti koje prođu bira se ona sa najboljim odnosom; pri
+   izjednačenju ona koja menja manje. Ako ne prođe nijedna, ostaje `after` i
+   merenje se upisuje — bez doterivanja.
+
+## 2026-10-12 — Krug 20: rezultat — ostaje `after`
+
+Mereno `scripts/krug20_veznici.py` na 15 srpskih ASR poslova (70 rečenica;
+četiri posla su ponovljeni snimci istih izjava, pa su neke rečenice dvaput).
+`web` i `digital` se prelamaju isto — brojke i promene su im identične.
+
+Gde rez pada danas (`after`): u `tv` 33 od 122 reza su iza veznika, 20
+ispred; u `web`/`digital` 41 od 301 iza, 40 ispred. Najčešći su `da` (iza 14
+/ ispred 10 u `tv`; 12 / 20 u `web`) i `i` (14 / 2; 22 / 10). `pa` i `te`
+skoro se ne javljaju (0–1), pa je varijanta 4 identična varijanti 3.
+
+| profil | varijanta | cue-ova | iza veznika | ispred veznika | iza predloga | ispred enklitike | ispod granice | preko CPS | red preko | promenjenih reč. |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `tv` | after | 126 | 33 | 20 | 0 | 0 | 2 | 3 | 0 | — |
+| `tv` | before | 132 | 5 | 43 | 0 | 0 | **3** | **4** | 0 | 24 |
+| `tv` | before, `da` van veznika | 132 | 5 | 38 | 0 | 0 | **3** | **4** | 0 | 22 |
+| `web`/`digital` | after | 371 | 41 | 40 | 3 | 2 | 33 | 52 | 0 | — |
+| `web`/`digital` | before | 370 | 9 | 62 | **4** | 2 | **36** | 50 | 0 | 24 |
+| `web`/`digital` | before, `da` van veznika | 367 | 12 | 57 | **4** | **4** | **36** | 50 | 0 | 23 |
+
+Svaka varijanta podiže bar jednu meru koja ne sme da poraste, u svakom
+profilu. Čitanje, po profilu odvojeno (`before`; u zagradi bez ponovljenih
+snimaka):
+
+- `tv`: 16 bolje, 1 gora, 7 neutralnih (14 : 1). Rez ide ispred `da` i `i`
+  (oblika `moramo / da krenemo`), a natpisi se zatvaraju na zarezu.
+  Oba pogoršanja mera su granična: cue od 19 znakova (granica 20) i cue od
+  20,5 CPS (granica 20), prvi u rečenici ocenjenoj kao bolja. Varijanta sa
+  `da` van veznika čita se još čistije: zavisni deo rečenice staje ceo u natpis do zareza.
+- `web`/`digital`: 13 bolje, 8 gore, 3 neutralne (11 : 6). Pored dobrih
+  (oblika `moramo || da krenemo`, `sunce || i kiša`) javljaju se rez iza
+  predloga, presečeni parovi `kao / i` i `nego / i`, zamenica otcepljena od
+  glagola; sa `da` van veznika i rez ispred enklitike (oblika `koje || ćemo`).
+
+Ni jedna varijanta ne ispunjava kriterijum (mere i 3 : 1 u obe grupe), pa
+**ostaje `after`**, bez doterivanja. Zapažanje za sledeći put, ne zaključak:
+u dvorednom `tv` strana veznika je jasno bolja ispred, a smetaju samo dve
+granične mere; u jednorednom profilu od 20 znakova rez ispred veznika
+često nema gde da stane — drugi primer iz povoda (veznik i nastavak, 23
+znaka) ne može da stane u jedan red ni u jednoj varijanti.

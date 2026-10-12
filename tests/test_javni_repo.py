@@ -49,12 +49,32 @@ def _h(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
 
-def pracene_datoteke() -> list[Path]:
+def _ls_files() -> list[tuple[str, str]]:
+    """(oznaka, putanja) iz `git ls-files -v`; `S` je skip-worktree."""
     try:
-        out = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=True)
+        out = subprocess.run(["git", "ls-files", "-v", "-z"], cwd=ROOT, capture_output=True, check=True)
     except (OSError, subprocess.CalledProcessError):
         pytest.skip("nije git repozitorijum")
-    return [ROOT / p for p in out.stdout.decode("utf-8").split("\0") if p]
+    return [(e[0], e[2:]) for e in out.stdout.decode("utf-8").split("\0") if e]
+
+
+def pracene_datoteke() -> list[Path]:
+    return [ROOT / p for _, p in _ls_files()]
+
+
+def skip_worktree() -> set[str]:
+    """Praćeni fajlovi čija se lokalna kopija namerno ne prati.
+
+    Primer: `glossary/default.json` je u repou izmišljen primer, a na radnoj
+    mašini stoji stvarni glosar, označen sa `git update-index --skip-worktree`
+    da nikad ne uđe u commit. Za takav fajl se proverava verzija iz indeksa —
+    ono što zaista ide u commit — a ne lokalna kopija.
+    """
+    return {p for oznaka, p in _ls_files() if oznaka == "S"}
+
+
+def _iz_indeksa(rel: str) -> bytes:
+    return subprocess.run(["git", "show", f":{rel}"], cwd=ROOT, capture_output=True, check=True).stdout
 
 
 _DATA = re.compile(r"data:[\w/+.-]*(?:;[\w=.-]+)*,[^\s\"')<>]*")
@@ -99,10 +119,19 @@ NEPROVERENI_PDF: list[str] = []
 def tekstovi() -> dict[str, str]:
     out = {}
     NEPROVERENI_PDF.clear()
+    skriveni = skip_worktree()
     for p in pracene_datoteke():
-        if p.name in SPISKOVI or not p.exists():
+        if p.name in SPISKOVI:
             continue
         rel = str(p.relative_to(ROOT))
+        if p.relative_to(ROOT).as_posix() in skriveni:
+            try:
+                out[rel] = bez_data(_iz_indeksa(p.relative_to(ROOT).as_posix()).decode("utf-8"))
+            except UnicodeDecodeError:
+                pass
+            continue
+        if not p.exists():
+            continue
         if p.suffix.lower() == ".pdf":
             t = pdf_tekst(p)
             if t is None:
@@ -215,3 +244,21 @@ def test_cetvorke_ne_zavise_od_pisma_velicine_dijakritike_i_interpunkcije():
         assert not izvorne("Đak je došao kasno."), "tri od četiri reči nisu dovoljne"
     finally:
         CETVORKE = stari
+
+
+def test_skip_worktree_fajl_se_proverava_iz_indeksa(tmp_path, monkeypatch):
+    """Lokalni stvarni glosar ne obara proveru; ono što ide u commit — da."""
+    import sys
+
+    def git(*a):
+        subprocess.run(["git", *a], cwd=tmp_path, capture_output=True, check=True)
+
+    git("init", "-q")
+    (tmp_path / "g.json").write_text("izmisljen primer", encoding="utf-8")
+    git("add", "g.json")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "t")
+    git("update-index", "--skip-worktree", "g.json")
+    (tmp_path / "g.json").write_text("lokalni sadrzaj", encoding="utf-8")
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+    assert skip_worktree() == {"g.json"}
+    assert tekstovi() == {"g.json": "izmisljen primer"}

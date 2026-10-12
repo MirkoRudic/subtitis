@@ -159,10 +159,18 @@ jobs/<job_id>/
   job.json            # status, parametri, istorija faza sa trajanjima
   log.txt             # svaka faza, model, retry pokušaji
   source.wav          # 16 kHz mono PCM s16le
+  pauses.json         # tišine iz zvuka (Silero VAD); ostaje i kad se source.wav obriše
   words.sr.json       # IZVOR ISTINE
   sentences.sr.json
   out/<ime>.sr-Latn.srt
 ```
+
+`pauses.json` (krug 19) nastaje pri prepoznavanju govora: razmak između reči
+u `words.json` za pauzu ne služi — Whisper tišinu upija u susednu reč, pa je na
+granici bez interpunkcije tačno 0 u 825 od 830 slučajeva. Fajl nosi čime je
+napravljen (`made_with`: verzija, model i parametri VAD-a). Prelamanje ga zasad
+ne koristi — izmereno i odbačeno (`linebreak.PAUSE_BREAK_DISCOUNT` i susedne
+konstante, `merenja/dnevnik.md`); stariji poslovi ga nemaju i rade kao ranije.
 
 `sentences.*.json` ima `edited_by_human`. Kad je `true`, `transcribe` odbija da
 prepiše fajl bez `--force`, a i tada pravi `.bak` kopiju.
@@ -333,6 +341,10 @@ nepredvidljiv prepis (od 11 do 52 reči istog fajla). VAD sam nije bolji — po
 tačnosti govora izjednačen je sa isključenim, samo ne pušta džingl do modela,
 a na tihom snimku bez muzike gubi govor. Zato ostaje isključen, uz savet po
 materijalu.
+
+`glossary/default.json` u repou je izmišljen primer. Radna mašina preko njega drži stvarni glosar,
+označen sa `git update-index --skip-worktree glossary/default.json` — git ne vidi izmenu i ne može da je
+komituje. Vraća se sa `git update-index --no-skip-worktree glossary/default.json`.
 
 ### Reči bez zvuka iza sebe
 

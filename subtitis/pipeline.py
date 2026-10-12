@@ -369,6 +369,17 @@ def run_transcribe(
 
     cfg.write_model(jdir / f"words.{language}.json", wf)
 
+    # Tišine iz zvuka (krug 19), dok zvuk postoji: `source.wav` se posle roka
+    # briše, a `pauses.json` ostaje. Prelamanje ih zasad ne koristi
+    # (`linebreak.pauses_enabled`); čuvaju se za ponovno merenje.
+    from . import pauses as pauses_mod
+
+    def _say(m: str) -> None:
+        cfg.log(jid, m)
+        on_log(m)
+
+    pauses_mod.ensure(jid, _say)
+
     # --- 3. segmentacija ---
     with cfg.phase(job, "segment") as det:
         sentences = segment_mod.segment(wf.words)
@@ -1240,6 +1251,13 @@ def run_build(
         cfg.log(job_id, m)
         on_log(m)
 
+    silences = None
+    if not is_translation and linebreak.pauses_enabled():
+        from . import pauses as pauses_mod
+
+        pf = pauses_mod.ensure(job_id, logger)
+        silences = pf.silences if pf is not None else None
+
     with cfg.phase(
         job, "build", profile=prof.name, script=script, language=lang,
         interpolated=is_translation, case=case, drop_punct=drop_punct,
@@ -1248,7 +1266,10 @@ def run_build(
             sf.sentences, words, prof, language=sf.language,
             log=logger, interpolate_times=is_translation,
             glossary_terms=cfg.glossary_terms(cfg.job_glossary(job_id), sf.language),
+            silences=silences,
         )
+        if linebreak.pauses_enabled() and not is_translation:
+            det["pauses"] = silences is not None
         # I za `Latn`, ne samo za `Cyrl`: ulazna datoteka ume da bude mešana
         # (stariji poslovi, ručne ispravke), a `convert` je idempotentan — nad
         # tekstom koji je već u traženom pismu ne menja ništa.
