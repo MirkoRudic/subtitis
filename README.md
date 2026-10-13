@@ -14,6 +14,7 @@ organizacije, projekti i rečenice. Alat radi isključivo lokalno: zvuk, prepisi
 i prevodi ne napuštaju računar. Da tako i ostane, proverava `tests/test_javni_repo.py`:
 pada na svaki pojam sa spiska zabranjenih i na svaku četvorku uzastopnih reči
 iz stvarnih snimaka na kojima je alat razvijan (oba spiska su samo heševi).
+Spisak četvorki dopunjuje `scripts/izvorne_cetvorke.py` iz `jobs/` radnog foldera (van gita); pokreni ga posle svakog novog posla — stari heševi ostaju.
 
 Licenca: MIT, vidi `LICENSE`.
 

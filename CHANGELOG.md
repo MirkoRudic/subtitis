@@ -29,3 +29,4 @@ red po krugu; javni repozitorijum počinje jednim commitom nad očišćenim stan
 - **Krug 20** (2026-10-12) — strana veznika u srpskom izmerena: `before` i `before` sa `da` van veznika čitaju se bolje u `tv` (14 : 1), ali ne u `web`/`digital` (11 : 6) i podižu mere koje ne smeju da porastu; ostaje `after`. Napomena o `skip-worktree` glosaru u README.
 - **Krug 21** (2026-10-12) — srpski u dvorednom prelomu lomi ispred veznika (`conjunction_side_multiline`), jednoredni ostaje iza; `web` i `digital` 28 znakova po redu (donja 14) umesto 20 — nestaju rezovi iza predloga i ispred enklitike, prekoračenja CPS-a 52 -> 18.
 - **2026-10-13** — projektni dokument v1.5 umesto v1.4; verzija 1.5.0.
+- **2026-10-13** — spisak četvorki se dopunjuje iz `jobs/` radnog foldera umesto iz privatne arhive; 998 heševa iz materijala kog više nema se čuva.

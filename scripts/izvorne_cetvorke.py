@@ -1,17 +1,21 @@
 """tests/izvorne_cetvorke.json iz izvornog materijala — heševi, ne tekst.
 
-    .venv\\Scripts\\python scripts\\izvorne_cetvorke.py D:\\VAJB\\subtitis-arhiva [dodatni.txt ...]
+    .venv\\Scripts\\python scripts\\izvorne_cetvorke.py [dodatni.txt ...]
 
 Izvorni materijal su stvarni snimci; u javnom repou ih nema i ne sme ih biti.
-Skripta čita privatnu kopiju (repo sa `jobs/` i `merenja/`) i upisuje samo
-heševe četvorki uzastopnih reči:
+Skripta čita poslove ovog radnog foldera (`jobs/`, u .gitignore) i upisuje
+samo heševe četvorki uzastopnih reči:
 
-* `jobs/**/*.json`, `merenja/**/*.json` — polja `text`, `src`, `asr_raw`,
-  `ref`, `lines` i nizovi reči (`words` sa poljem `w`);
-* `jobs/**/*.srt` — tekst svakog bloka;
-* `eval/pairs.json` iz poslednjeg commita privatnog repoa;
-* dodatni fajlovi sa komandne linije — jedna izjava po redu (npr. doslovni
-  citati iz starog dnevnika merenja).
+* `jobs/**/*.json` — polja `text`, `src`, `asr_raw`, `ref`, `lines` i nizovi
+  reči (`words` sa poljem `w`): rečenice i reči svakog jezika;
+* `jobs/**/*.srt` — tekst svakog bloka (izlazi i otpremljeni SRT);
+* dodatni fajlovi sa komandne linije — jedna izjava po redu.
+
+Spisak se samo DOPUNJUJE: heševi koji su već u fajlu ostaju, novi se dodaju.
+Pokreni posle svakog novog posla. Do 2026-10-13 spisak je građen iz privatne
+arhive — i iz poslova kojih više nema, francuskih snimaka iz `merenja/krug5`
+i starog `eval/pairs.json`; 998 tih heševa ne postoji ni u jednom današnjem
+poslu, pa bi ih izgradnja iz početka zauvek izgubila.
 
 Četvorka od samih funkcijskih reči (`i da se u`, `parce que parce que`) se
 izostavlja: nije izjava, a javlja se svuda; isto i četvorka iz kratkog spiska
@@ -22,7 +26,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -70,8 +73,8 @@ ZASTO = [
     "Ova provera ne zavisi od toga da li je neko unapred nabrojao šta je poverljivo.",
     "Ovde su samo heševi: prvih 16 heks-cifara SHA-256 od četiri normalizovane reči spojene razmakom "
     "(scripts/zabranjen_pojam.py: reci() — latinica, mala slova, bez dijakritike, samo slova i cifre).",
-    "Fajl pravi scripts/izvorne_cetvorke.py iz privatne kopije sa snimcima; ručno se ne menja. "
-    "Kad test padne, rečenicu napiši iznova — zamena imena ostavlja izjavu netaknutu.",
+    "Fajl dopunjuje scripts/izvorne_cetvorke.py iz poslova radnog foldera (jobs/, van gita); postojeći heševi "
+    "se nikad ne brišu, ručno se ne menja. Kad test padne, rečenicu napiši iznova — zamena imena ostavlja izjavu netaknutu.",
 ]
 
 
@@ -91,20 +94,16 @@ def _tekstovi_iz_jsona(o, out: list[str]) -> None:
             _tekstovi_iz_jsona(x, out)
 
 
-def izjave(arhiva: Path, dodatni: list[Path]) -> list[str]:
+def izjave(jobs: Path, dodatni: list[Path]) -> list[str]:
     out: list[str] = []
-    for p in sorted([*arhiva.glob("jobs/**/*.json"), *arhiva.glob("merenja/**/*.json")]):
+    for p in sorted(jobs.glob("**/*.json")):
         try:
             _tekstovi_iz_jsona(json.loads(p.read_text(encoding="utf-8")), out)
         except (UnicodeDecodeError, json.JSONDecodeError):
             continue
-    for p in sorted(arhiva.glob("jobs/**/*.srt")):
+    for p in sorted(jobs.glob("**/*.srt")):
         for blok in p.read_text(encoding="utf-8-sig").split("\n\n"):
             out.append(" ".join(blok.strip().splitlines()[2:]))
-    pairs = subprocess.run(["git", "show", "HEAD:eval/pairs.json"], cwd=arhiva,
-                           capture_output=True, check=True).stdout.decode("utf-8")
-    for par in json.loads(pairs)["pairs"]:
-        out += [par[k] for k in ("src", "asr_raw", "ref") if k in par]
     for p in dodatni:
         out += p.read_text(encoding="utf-8").splitlines()
     return [t for t in dict.fromkeys(out) if t.strip()]
@@ -120,19 +119,26 @@ def hes(c: tuple[str, ...]) -> str:
 
 
 def main() -> None:
-    arhiva, *dodatni = (Path(a) for a in sys.argv[1:])
-    tekst = izjave(arhiva, dodatni)
+    from subtitis.config import JOBS_DIR
+
+    dodatni = [Path(a) for a in sys.argv[1:]]
+    tekst = izjave(JOBS_DIR, dodatni)
+    if not tekst:
+        raise SystemExit(f"u {JOBS_DIR} nema nijedne izjave — spisak se ne dira")
     sve = set().union(*(cetvorke(t) for t in tekst))
     opste = set().union(*(cetvorke(f) for f in OPSTE))
     izostavljene = {c for c in sve if all(r in FUNKCIJSKE for r in c) or c in opste}
-    hesevi = sorted({hes(c) for c in sve - izostavljene})
+    novi = {hes(c) for c in sve - izostavljene}
     dst = ROOT / "tests" / "izvorne_cetvorke.json"
+    stari = set(json.loads(dst.read_text(encoding="utf-8"))["h"]) if dst.exists() else set()
+    hesevi = sorted(stari | novi)
     dst.write_text(json.dumps({
         "_zasto": ZASTO,
         "n": N, "hex": HEX, "h": hesevi,
     }, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    print(f"{len(tekst)} izjava, {len(sve)} četvorki, {len(izostavljene)} izostavljeno (samo "
-          f"funkcijske reči ili OPSTE), {len(hesevi)} heševa -> {dst}")
+    print(f"{JOBS_DIR}: {len(tekst)} izjava, {len(sve)} četvorki, {len(izostavljene)} izostavljeno "
+          f"(samo funkcijske reči ili OPSTE); {len(novi - stari)} novih heševa, "
+          f"{len(stari - novi)} zadržanih iz ranijih izvora, ukupno {len(hesevi)} -> {dst}")
 
 
 if __name__ == "__main__":
