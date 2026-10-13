@@ -193,10 +193,11 @@ def default_profile() -> str:
 
 
 def new_project_glossary() -> str:
-    """Šta nov projekat dobija kao glosar: `default` (kopija podrazumevanog)
-    ili `none`. Bira se u podešavanjima, ne na početnoj strani."""
-    val = str(setting("new_project_glossary", default="default"))
-    return val if val in ("default", "none") else "default"
+    """Šta nov projekat dobija kao glosar: `none` (prazan, podrazumevano od
+    kruga 23) ili `default` (kopija podrazumevanog). Glosar je alat za jedan
+    snimak: termini se dodaju svesno, kad se zna da ih u snimku ima."""
+    val = str(setting("new_project_glossary", default="none"))
+    return val if val in ("default", "none") else "none"
 
 
 def default_target_language() -> str:
@@ -388,7 +389,7 @@ def save_glossary(
 ) -> Path:
     """Upiši glosar, uz `.bak` kopiju prethodnog.
 
-    Glosar je ručno kuriran i ulazi u ASR (`hotwords`) i u prevodni prompt —
+    Glosar je ručno kuriran i ulazi u prevodni prompt —
     slučajno brisanje kroz ekran mora da se može vratiti.
     """
     p = glossary_path(path)
@@ -407,9 +408,8 @@ def save_glossary(
 
 JOB_GLOSSARY = "glossary.json"
 
-#: Ključ pod kojim stoje termini snimka: samo za prepoznavanje (`hotwords`),
-#: bez prevoda. `glossary_keys` ih vidi jer je izvorni jezik isti; prevodni
-#: smerovi (`sr->en`) ih ne vide.
+#: Ključ pod kojim stoje termini snimka: JEDINO što ide u prepoznavanje
+#: (`hotwords`), bez prevoda. Prevodni parovi (`sr->en`) idu samo u prevod.
 RECORDING_TERMS_KEY = "{lang}"
 
 
@@ -488,7 +488,8 @@ def hop_glossary(
 
 
 def glossary_keys(glossary: dict[str, dict[str, str]], src_lang: str) -> list[str]:
-    """Ključevi svih parova gde je `src_lang` izvorni — idu u Whisperov initial_prompt."""
+    """Ključevi svih parova gde je `src_lang` izvorni (i termini snimka) — za
+    prebrojavanje. U prepoznavanje idu samo `recording_terms` (krug 23)."""
     keys: list[str] = []
     for pair, mapping in glossary.items():
         if pair.split("->")[0].strip() == src_lang:

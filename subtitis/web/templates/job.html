@@ -67,12 +67,17 @@
   </div>
 {% endfor %}
 
-{% if halluc_items %}
+{% if invented %}
+  {#- Cela rečenica, ne samo uhvaćene reči: pravilo hvata reči nultog
+      trajanja, a izmišljena rečenica ume da ima i razvučene (krug 23). Ista
+      brojka stoji u „Za preuzimanje". -#}
+  {% set n = invented|length %}
   <div class="flagbar err">
     <span class="ic">!</span>
-    <span><b>{{ halluc_words }} {{ 'reč' if halluc_words == 1 else 'reči' }} bez zvuka iza sebe</b> — gotovo sigurno izmišljene.
-      {% for h in halluc_items %}<code>{{ h.text }}</code> u {{ h.at }}{% if not loop.last %}; {% endif %}{% endfor %}.
-      Precrtane su u editoru; izbaci ih pa će oznaka nestati.</span>
+    <span><b>{{ n }} {{ n|plural('rečenica', 'rečenice', 'rečenica') }} bez zvuka iza sebe — gotovo sigurno {{ n|plural('izmišljena', 'izmišljene', 'izmišljenih') }}, {{ n|plural('cela', 'cele', 'cele') }}.</b>
+      {% for v in invented %}Rečenica {{ v.sentence }} u {{ v.at }}: {{ v.words }} {{ v.words|plural('reč', 'reči', 'reči') }}{% if v.caught < v.words %}, od toga {{ v.caught }} bez trajanja — ostale imaju razvučena vremena pa ih pravilo ne hvata, ali su deo iste rečenice{% endif %}{% if not loop.last %}; {% endif %}{% endfor %}.
+      {% if halluc_items %}Uhvaćene reči: {% for h in halluc_items %}<code>{{ h.text }}</code> u {{ h.at }}{% if not loop.last %}; {% endif %}{% endfor %}.{% endif %}
+      Precrtane su u editoru; izbaci rečenicu pa će oznaka nestati.</span>
   </div>
 {% endif %}
 
@@ -559,8 +564,8 @@
       {% set gi = glossary_info %}
       <p class="note">glosar:
         {% if not gi.own -%}podrazumevani — projekat je stariji od glosara po projektu
-        {% elif not gi.asr_terms %}prazan glosar
-        {% else %}glosar projekta{% if gi.recording_terms %}, od toga {{ gi.recording_terms|length }} iz ovog snimka{% endif %}{% endif %}
+        {% elif not gi.asr_terms and not gi.pairs %}prazan glosar
+        {% else %}glosar projekta · {{ gi.asr_terms|length }} {{ 'termin' if gi.asr_terms|length == 1 else 'termina' }} iz ovog snimka u prepoznavanju{% if gi.pairs %}, prevodni parovi samo u prevodu{% endif %}{% endif %}
         {%- if gi.asr_terms %} · <span class="field-label">termini{% call why(za="Termini u prepoznavanju") %}<p>{{ gi.asr_terms|join(' · ') }}</p>{% endcall %}</span>{% endif %}
       </p>
     {% endif %}

@@ -1389,6 +1389,54 @@ def test_editor_boji_reci_bez_zvuka_crveno_i_samo_njih(web):
     assert '<span class="halluc"' not in page
 
 
+def test_izmisljena_recenica_cela_u_traci_i_u_panelu_za_preuzimanje(web):
+    """Krug 23: traka kaže da je sumnjiva CELA rečenica (i reči sa razvučenim
+    vremenom, koje pravilo ne hvata), a panel za preuzimanje nosi istu brojku
+    i broj natpisa po fajlu — bez blokiranja preuzimanja."""
+    client, db, cfg = web
+    jid = make_job(cfg, db)
+    jdir = cfg.job_dir(jid)
+    words = [
+        Word(i=0, s=0.0, e=0.5, w="Dobar", p=0.95),
+        Word(i=1, s=0.5, e=1.0, w="dan", p=0.95),
+        Word(i=2, s=3.0, e=3.0, w="OKC", p=0.99),
+        Word(i=3, s=3.0, e=3.0, w="Divčibare", p=0.99),
+        Word(i=4, s=3.0, e=4.2, w="Srbija", p=0.2),  # razvučena — pravilo je ne hvata
+    ]
+    cfg.write_model(jdir / "words.sr.json", WordsFile(
+        job_id=jid, source_file="x", duration=5.0, language="sr",
+        asr=AsrMeta(model="test"), words=words,
+    ))
+    cfg.write_model(jdir / "sentences.sr.json", SentencesFile(
+        job_id=jid, language="sr", derived_from="words.sr.json",
+        sentences=[
+            Sentence(id=1, s=0.0, e=1.0, text="Dobar dan", words=(0, 1)),
+            Sentence(id=2, s=3.0, e=4.2, text="OKC Divčibare Srbija", words=(2, 4)),
+        ],
+    ))
+    (jdir / "out").mkdir(exist_ok=True)
+    srt = ("1\n00:00:00,000 --> 00:00:01,000\nDobar dan\n\n"
+           "2\n00:00:03,000 --> 00:00:03,500\nOKC Divčibare\n\n"
+           "3\n00:00:03,583 --> 00:00:04,200\nSrbija\n")
+    (jdir / "out" / "x.sr-Latn.srt").write_text(srt, encoding="utf-8")
+    page = client.get(f"/jobs/{jid}").text
+    bar = page.split('class="flagbar err"')[1].split("</div>")[0]
+    assert "1 rečenica bez zvuka iza sebe" in bar and "cela" in bar
+    assert "3 reči, od toga 2 bez trajanja" in bar
+    panel = page.split('id="downloads"')[1].split("</section>")[0]
+    assert "1 rečenica bez zvuka iza sebe" in panel and "(3 reči)" in panel
+    assert "2 izmišljena" in panel  # natpisi 2 i 3, natpis 1 je govor
+    assert "Fajl se preuzima kakav jeste" in panel
+    assert client.get(f"/jobs/{jid}/download/x.sr-Latn.srt").status_code == 200
+
+    # izbačena rečenica -> nestaje i traka i oznaka u panelu
+    sf = SentencesFile.model_validate(cfg.read_json(jdir / "sentences.sr.json"))
+    sf.sentences[1].text = "Hvala"
+    cfg.write_model(jdir / "sentences.sr.json", sf)
+    page = client.get(f"/jobs/{jid}").text
+    assert "bez zvuka iza sebe" not in page.split('id="downloads"')[1].split("</section>")[0]
+
+
 # ==========================================================================
 # Glosar posla (krug 5)
 # ==========================================================================
@@ -1400,10 +1448,19 @@ def _upload(client, **form):
                        data=data, follow_redirects=False)
 
 
-def test_nov_posao_dobija_kopiju_podrazumevanog_glosara(web):
+def test_nov_posao_podrazumevano_dobija_prazan_glosar(web):
+    """Krug 23: glosar je alat za jedan snimak, ne stalna postavka."""
     client, db, cfg = web
     cfg.save_glossary({"sr->en": {"Radionica otvorenih vrata": "Open Door Workshop"}})
+    assert cfg.new_project_glossary() == "none"
     jid = _upload(client).headers["location"].rsplit("/", 1)[-1]
+    assert cfg.job_glossary(jid) == {}
+
+
+def test_nov_posao_dobija_kopiju_podrazumevanog_glosara_kad_se_izabere(web):
+    client, db, cfg = web
+    cfg.save_glossary({"sr->en": {"Radionica otvorenih vrata": "Open Door Workshop"}})
+    jid = _upload(client, glossary_mode="default").headers["location"].rsplit("/", 1)[-1]
     assert cfg.job_glossary(jid) == {"sr->en": {"Radionica otvorenih vrata": "Open Door Workshop"}}
     # izmena podrazumevanog posle otvaranja ne menja posao
     cfg.save_glossary({"sr->en": {"Nešto drugo": "Something else"}})
@@ -1648,7 +1705,8 @@ def test_traka_izmisljenih_reci_kaze_sta_i_kad(web):
     ))
     page = client.get(f"/jobs/{jid}").text
     bar = page.split('class="flagbar err"')[1].split("</div>")[0]
-    assert "2 reči bez zvuka iza sebe" in bar
+    assert "1 rečenica bez zvuka iza sebe" in bar
+    assert "Rečenica 2 u 00:32,26: 2 reči." in bar  # sve uhvaćene — bez „od toga"
     assert "<code>OKC Divčibare</code> u 00:32,26" in bar
 
 

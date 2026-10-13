@@ -622,3 +622,139 @@ nestaju, prekoračenja CPS-a padaju sa 52 na 18, kratki cue-ovi sa 33 na 12.
 Dvoredni 28 × 2 sa `before` bi CPS spustio još (18 -> 7) i stavio više
 rečenica u jedan natpis (14 -> 22), uz duže natpise (1,71 -> 2,47 s) — to je
 drugi oblik natpisa, zaseban izbor, nije uveden.
+
+## 2026-10-13 — Krug 22: pauza ponovo izmerena na 28 znakova — opet se ne uvodi
+
+Povod: krug 19 je meren na `web`/`digital` od 20 znakova (donja 10); krug 21
+ih je proširio na 28/14. Mreža i kriterijum kruga 19 bez izmene, prolaz i
+čitanje po obliku odvojeno (pravilo posle kruga 20). `scripts/krug22_pauze.py`.
+
+Skup poslova nije isti: od 15 poslova kruga 19 osam je u međuvremenu
+izgubilo zvuk po roku (a nemaju `pauses.json`), pa nemaju pauza. Mereno je
+11 poslova koji tišine imaju (7 iz kruga 19 + 4 nova), 51 rečenica.
+`digital` se prelama kao `web` (provereno u skripti), meri se jednom.
+
+Nova mera — udeo cue-ova sa pauzom iznad praga, bez pauza u prelomu, isti
+poslovi:
+
+| profil | cue-ova | ≥ 0,12 | ≥ 0,20 | ≥ 0,30 | ≥ 0,45 |
+|---|---|---|---|---|---|
+| `tv` | 102 | 66,7 % | 58,8 % | 47,1 % | 32,4 % |
+| `web` 28/14 | 202 | 39,1 % | 35,6 % | 26,7 % | 16,3 % |
+| `web` 20/10 (kontrola) | 294 | 25,5 % | 22,1 % | 15,3 % | 10,5 % |
+
+Širina je udeo stvarno podigla: na pragu 0,30 s sa 15 na 27 % natpisa.
+
+Mere (kriterijum 1 i 2, „ne sme da poraste" / „mora da padne"):
+
+- `tv`: prolazi 42 od 48 tačaka, i kazna za pauzu u cue-u (mehanizam 1)
+  — u krugu 19 nije prolazila nigde. Pada samo težina 200 (jedan cue
+  ispod 20 znakova, uz popust 50 i jedan preko CPS-a). Najveći pad: prag
+  0,12, težina 100, popust 50 — 68 -> 48 cue-ova sa pauzom (66,7 -> 41,7 %).
+- `web`: prolazi 2 od 48 — prag 0,20 ili 0,30, težina 50, bez popusta —
+  oba sa −2 cue-a (−1 procentni poen). Ostale tačke padaju: popust 50 daje
+  dva reza iza predloga u svakoj tački; kazna od 100 i više diže kratke
+  cue-ove. Najbliži promašaji obaraju se jednim cue-om ispod donje granice
+  (prag 0,20 ili 0,30, težina 100 ili 200, bez popusta: −5 cue-ova sa
+  pauzom, −2,6 poena).
+- Mehanizam 3 (kazna za rez bez pauze) nigde ne dodaje 10 % pada — ne prolazi.
+
+Čitanje (bolje : gore : neutralno; u zagradi bez ponovljenih snimaka):
+
+| tačka | `tv` | `web`/`digital` |
+|---|---|---|
+| zajednička (0,20 / 50 / 0) — izbor po kriterijumu 3 | 6 : 1 : 3 (5 : 1 : 2) | 1 : 3 : 1 (1 : 2 : 1) |
+| najveći pad po obliku (`tv` 0,12 / 100 / 50) | 6 : 11 : 7 | — |
+| najbliži promašaj (`web` 0,30 / 100 / 0, `ispod` +1) | — | 1 : 5 : 2 (1 : 4 : 2) |
+
+Ishod: **ne uvodi se.** Zajednička tačka pada na `web`; po obliku odvojeno
+`tv` prolazi samo na blagoj tački (0,20 / 50), a tačka koju bira kriterijum 3
+(najveći pad) čita se 6 : 11. `web` nije blizu ni po čitanju: najbliži
+promašaj po merama čita se gore od tačke koja prolazi.
+
+Gore je skoro svuda isti oblik: govornik zastaje POSLE veznika, pa pauza
+vuče kraj natpisa iza `i`, `ali`, `a`, `pa`, `da` — tačno ono što je krug 21
+uklonio u dvorednom prelomu. U `web` još: lista ili parentetički umetak
+presečen tako da jedna reč ostane sama u natpisu, i stalni par razdvojen.
+Bolje je razdvajanje paralelnih rečenica i uslovne rečenice sa posledicom u
+jednom natpisu, i nestanak reza između reči i broja uz nju.
+
+Zapažanje za sledeće merenje, ne zaključak: pauza na granici iza reči sa
+koje se ne sme završiti natpis (veznik, predlog) nije signal za rez nego
+oklevanje; tako filtrirana pauza nije merena.
+
+## 2026-10-13 — Definicija: „natpis sadrži pauzu" (važi od kruga 23)
+
+**Merilo rezultata:** natpis sadrži pauzu ako se tišina iz zvuka (Silero,
+`pauses.json`) preklapa sa **rasponom govora natpisa** — od početka prve do
+kraja poslednje reči — bar za prag. Raspon govora, ne raspon prikaza: kraj
+prikaza `apply_timing` produžava u tišinu posle govora, a natpis koji stoji
+posle izgovorenog nije greška preloma.
+
+**Dopunska mera** (kako je mereno u krugovima 19 i 22): tišina se pripiše
+najbližoj granici reči (`pauses.boundary_pauses`), pa se gleda da li je ta
+granica unutar natpisa.
+
+Zašto prva: (1) to gledalac vidi — natpis stoji, a govora nema; (2) ne
+zavisi od pripisivanja tišine granici, a baš to pripisivanje mehanizmi
+menjaju (`move` u krugu 23 premešta pauzu) — mera ne sme da bude deo onoga
+što meri; (3) dopunska je pokazala napredak koji se na ekranu ne vidi (ispod).
+Na snimku Video-4 draft 2 (profil `digital`): po merilu 9 od 15 stvarnih
+natpisa, po dopunskoj 5.
+
+## 2026-10-13 — Krug 23: pauza iza reči na kojoj natpis ne sme da se završi
+
+`scripts/krug23_lazna_pauza.py`, isti 11 poslova i ista mreža kao krug 22.
+`linebreak.PAUSE_AT_FUNCTION_WORD`: `keep` (do sada), `drop` (pauza se ne
+računa ni u jednom mehanizmu), `move` (pripisuje se granici ispred te reči;
+ispred enklitike se odbacuje). „Takva reč": `no_line_end` (predlozi,
+enklitike, `ne`) + veznici iz `SR_CONJUNCTIONS` + `a`, ili enklitika iza
+granice. Veznici NISU u `no_line_end` — strana veznika je posebno pravilo.
+
+**Koliko ih ima** (pauza pripisana granici, pre mreže):
+
+| prag | pauza na granici | lažnih | predlog | enklitika | `ne` | veznik | `a` | ispred enklitike |
+|---|---|---|---|---|---|---|---|---|
+| 0,12 | 117 | 52 (44 %) | 13 | 1 | 4 | 23 | 1 | 10 |
+| 0,20 | 105 | 47 (45 %) | 12 | 1 | 4 | 21 | 1 | 8 |
+| 0,30 | 81 | 28 (35 %) | 6 | 0 | 2 | 14 | 1 | 5 |
+| 0,45 | 48 | 19 (40 %) | 3 | 0 | 2 | 10 | 1 | 3 |
+
+Na 0,30 najčešće iza `i` (7) i `da` (4). Ima šta da se popravi.
+
+**Glavni nalaz — pauza je u reči, ne između reči.** Od 100 tišina ≥ 0,30 s
+unutar rečenice, 96 leži bar pola u trajanju neke reči (Whisper tišinu
+upija u reč — krug 19: razmak nula na 825 od 830 granica). Rez je uvek na
+granici reči, pa tišina posle svakog reza ostaje u jednom od dva natpisa.
+Po merilu, nijedan mehanizam preloma je ne izbacuje sa ekrana: u `tv` broj
+natpisa sa pauzom ne pada ni u jednoj od 144 tačke (raste sa brojem
+natpisa; udeo pada najviše 5,2 poena), dok dopunska mera pada do −22 —
+napredak kruga 22 u `tv` (68 -> 48) bio je napredak dopunske mere.
+
+| oblik | način | prolazi brojke | najbolji pad po merilu | dopunska, najveći pad |
+|---|---|---|---|---|
+| `tv` | keep | 0 / 48 | nijedan (najmanje +1) | −22 |
+| `tv` | drop | 0 / 48 | nijedan (najmanje +1) | −15 |
+| `tv` | move | 0 / 48 | nijedan (najmanje +1) | −15 |
+| `web` | keep | 3 / 48 | −2 (0,45 / 50 / 0) | −14 |
+| `web` | drop | 5 / 48 | −2 (0,20 / 50 / 0) | −4 |
+| `web` | move | 2 / 48 | −2 (0,45 / 50 / 0) | −4 |
+
+**Čitanje** (bolje : gore : neutralno; u zagradi bez ponovljenih snimaka):
+
+| tačka | `keep` | `drop` | `move` |
+|---|---|---|---|
+| `tv` 0,12 / 100 / 50 (krug 22: najveći pad) | 6 : 11 : 7 | 9 : 5 : 5 (8 : 4 : 3) | 9 : 5 : 7 (8 : 4 : 5) |
+| `web`, tačka koju bira kriterijum | 0 : 1 : 1 | 1 : 3 : 1 (1 : 2 : 1) | 0 : 1 : 1 |
+
+Mehanizam radi ono za šta je smišljen: krajeva natpisa na takvoj reči u
+promenjenim rečenicama `tv` je 12 sa `keep`, 0 sa `drop`, 1 sa `move`. Gore
+je posle toga druge vrste: subjekat odvojen od predikata preko granice
+natpisa, zamenica odvojena od glagola, rez kroz zavisnu rečenicu. `move` i
+`drop` se čitaju isto.
+
+Ishod: **ne uvodi se** — merilo ne pada ni u jednom obliku, a čitanje `tv`
+(9 : 5) ne dostiže 3 : 1. `PAUSE_AT_FUNCTION_WORD` ostaje `keep`, ostale
+težine 0, kao posle kruga 19. Zapažanje, ne zaključak: dokle god reči upijaju
+tišinu, ono što gledalac vidi menja samo vreme natpisa (kraj natpisa na
+početku tišine, početak sledećeg na njenom kraju), ne prelom.

@@ -14,6 +14,7 @@ from subtitis.models import Profile, Word
 JEDAN_RED = Profile(name="t", max_chars_per_line=20, max_lines=1, min_chars_per_line=10,
                     max_cps=99, max_duration=99)
 REC = "Sutra rano ujutru idemo kolima na more pa posle vozom kući."
+VEZNIK = "Kupili smo hleb sa semenkama i mleko od komšije."
 
 
 def w(i, s, e, t):
@@ -267,3 +268,58 @@ def test_ukljuceno_bez_zvuka_radi_i_kaze(asr_posao, monkeypatch, tmp_path):
     assert any("prelamanje bez pauza" in m for m in log)
     build = [h for h in cfg.load_job("a").history if h.phase == "build"][-1]
     assert build.detail["pauses"] is False
+
+
+# ==========================================================================
+# Pauza iza reči na kojoj natpis ne sme da se završi (krug 23)
+# ==========================================================================
+
+SR = lb.LANGUAGE_RULES["sr"]
+
+
+def test_lazna_pauza_iza_veznika_predloga_i_a_ispred_enklitike():
+    ws = make_words("kupili smo hleb i mleko a posle na pijaci kupili smo")
+    toks = [w.w for w in ws]
+    assert lb.false_pause_at(ws, toks.index("i"), SR) == "left"
+    assert lb.false_pause_at(ws, toks.index("a"), SR) == "left"
+    assert lb.false_pause_at(ws, toks.index("na"), SR) == "left"
+    assert lb.false_pause_at(ws, toks.index("kupili"), SR) == "right"  # ispred `smo`
+    assert lb.false_pause_at(ws, toks.index("hleb"), SR) is None
+    assert lb.false_pause_at(ws, len(ws) - 1, SR) is None  # kraj rečenice
+
+
+def test_pauza_na_zarezu_je_prava():
+    ws = make_words("hleb, i mleko")
+    assert lb.false_pause_at(ws, 1, SR) is None  # `,` — granica klauze
+
+
+def test_drop_odbacuje_a_move_prebacuje_ispred_veznika():
+    ws = make_words("hleb i mleko")
+    p = [0.0, 0.6, 0.0]  # pauza posle `i`
+    assert lb.adjust_pauses(ws, p, SR, "keep") == p
+    assert lb.adjust_pauses(ws, p, SR, "drop") == [0.0, 0.0, 0.0]
+    assert lb.adjust_pauses(ws, p, SR, "move") == [0.6, 0.0, 0.0]
+
+
+def test_move_preskace_niz_funkcijskih_reci_i_ne_dira_enklitiku():
+    ws = make_words("idemo i u grad")
+    assert lb.adjust_pauses(ws, [0.0, 0.0, 0.5, 0.0], SR, "move") == [0.5, 0.0, 0.0, 0.0]
+    ws = make_words("kupili smo hleb")
+    # ispred enklitike nema kuda nazad: pauza se odbacuje i u `move`
+    assert lb.adjust_pauses(ws, [0.5, 0.0, 0.0], SR, "move") == [0.0, 0.0, 0.0]
+    ws = make_words("i grad")
+    assert lb.adjust_pauses(ws, [0.5, 0.0], SR, "move") == [0.0, 0.0]
+
+
+def test_kazna_za_pauzu_iza_veznika_vise_ne_vuce_kraj_natpisa_na_veznik(monkeypatch):
+    """Krug 22: jača kazna -> natpis se završava na `i`. Uz `drop` ta pauza ne
+    postoji za prelamanje, pa kraj natpisa ostaje gde bi bio bez nje."""
+    assert lb.PAUSE_AT_FUNCTION_WORD == "keep"
+    monkeypatch.setattr(lb, "PENALTY_PAUSE_IN_CUE", 200)
+    ws = make_words(VEZNIK)
+    sil = tisina_posle(ws, [w.w for w in ws].index("i"), 0.8)
+    assert any(l.endswith(" i") for l in lines(ws, sil))
+    monkeypatch.setattr(lb, "PAUSE_AT_FUNCTION_WORD", "drop")
+    assert lines(ws, sil) == lines(ws)
+    monkeypatch.setattr(lb, "PAUSE_AT_FUNCTION_WORD", "move")
+    assert not any(l.endswith(" i") for l in lines(ws, sil))

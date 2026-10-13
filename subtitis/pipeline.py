@@ -186,10 +186,12 @@ def run_transcribe(
     if glossary is None:
         ensure_job_glossary(jid)
     gloss = cfg.load_glossary(glossary) if glossary else cfg.job_glossary(jid)
-    # Uz auto-detekciju glosar ne može da se prosledi kao `hotwords`: termini se
-    # biraju po jeziku, a jezik se zna tek posle prolaza. Ko hoće glosar, zada
-    # jezik izričito.
-    terms = [] if auto_language else cfg.glossary_keys(gloss, language)
+    # U prepoznavanje (`hotwords`) idu SAMO termini ovog snimka. Prevodni
+    # parovi (`sr->fr`...) idu samo u prevod: kao nagoveštaj su izlazili preko
+    # tišine na kraju snimka (krug 23, Video-4 draft 2: 13 izmišljenih reči
+    # iz `sr->fr` rečnika drugog projekta). Uz auto-detekciju termini ne mogu
+    # da se proslede: jezik se zna tek posle prolaza.
+    terms = [] if auto_language else cfg.recording_terms(gloss, language)
     cfg.log(jid, f"glosar projekta: {len(terms)} termina ide u prepoznavanje (hotwords)")
     job.status = "transcribing"
     cfg.save_job(job)
@@ -500,15 +502,18 @@ CUES_FILE = "cues.json"
 
 
 def ensure_job_glossary(job_id: str) -> None:
-    """Posao bez sopstvenog glosara dobija kopiju podrazumevanog.
+    """Posao bez sopstvenog glosara dobija ono što kaže podešavanje
+    `new_project_glossary` — prazan ili kopiju podrazumevanog.
 
-    Web pravi glosar posla pri otpremanju (sa izborom „bez glosara" i
-    terminima snimka); ovo pokriva sve ostale puteve — CLI, uvoz SRT-a.
+    Web pravi glosar posla pri otpremanju (uz termine snimka); ovo pokriva sve
+    ostale puteve — CLI, uvoz SRT-a — po ISTOM podešavanju. Do kruga 23 su
+    uvek kopirali podrazumevani, mimo podešavanja i bez traga na ekranu.
     Postojeći glosar posla (i prazan) se ne dira.
     """
     p = cfg.job_glossary_path(job_id)
     if not p.exists():
-        cfg.write_json(p, cfg.load_glossary())
+        use_default = cfg.new_project_glossary() == "default"
+        cfg.write_json(p, cfg.load_glossary() if use_default else {})
 
 
 def is_srt_job(job_id: str) -> bool:

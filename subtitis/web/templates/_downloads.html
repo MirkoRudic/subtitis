@@ -11,11 +11,20 @@
         <a class="dlrow" href="/jobs/{{ job.id }}/download/{{ f.name }}">
           <span class="lang">{{ f.label }}</span>
           <span class="fn">{{ f.name }}</span>
-          <span class="sz">{% if f.cues is not none %}{{ f.cues }} cue-ova · {% endif %}{{ f.size_kb|dec }} kB</span>
+          <span class="sz">{% if f.invented %}<span class="err">{{ f.invented }} {{ f.invented|plural('izmišljen', 'izmišljena', 'izmišljenih') }}</span> · {% endif %}{% if f.cues is not none %}{{ f.cues }} cue-ova · {% endif %}{{ f.size_kb|dec }} kB</span>
           <span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="m6 10 6 6 6-6"/><path d="M4 20h16"/></svg></span>
         </a>
       {% endfor %}
     </div>
+    {% if invented %}
+      {#- Ista brojka kao crvena traka na vrhu (krug 23). Preuzimanje se ne
+          blokira i ne traži potvrdu — ali panel ne sme da ćuti. -#}
+      {% set n = invented|length %}
+      <p class="note"><span class="err"><b>{{ n }} {{ n|plural('rečenica', 'rečenice', 'rečenica') }} bez zvuka iza sebe</b></span>
+        ({{ invented|sum(attribute='words') }} reči) {{ 'je' if n == 1 else 'su' }} u svakom fajlu ispod — gotovo sigurno
+        {{ 'nije izgovorena' if n == 1 else 'nisu izgovorene' }}. Fajl se preuzima kakav jeste; izbaci
+        {{ 'je' if n == 1 else 'ih' }} u editoru pa će i natpisi i ova oznaka nestati.</p>
+    {% endif %}
     {% if built %}
       {# Ime fajla je po BCP-47 i ne nosi profil, pa se svi profili pišu u
          isti fajl. Bez ovog reda se ne vidi šta je primenjeno. #}

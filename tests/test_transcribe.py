@@ -272,3 +272,52 @@ def test_tisine_koje_se_ne_mogu_izmeriti_ne_obaraju_posao(lazno):
     r, jdir, log, logs = pokreni(lazno, "sr")
     assert cfg.load_job("p").status == "transcribed"
     assert pauses.load("p") is None and "prelamanje bez pauza" in log
+
+
+# --------------------------------------------------------------------------
+# Glosar u prepoznavanju (krug 23)
+# --------------------------------------------------------------------------
+
+
+def _spy_terms(lazno, monkeypatch):
+    seen = {}
+    orig = asr.transcribe
+
+    def spy(wav, **kw):
+        seen["terms"] = kw.get("glossary_terms")
+        return orig(wav, **kw)
+
+    monkeypatch.setattr(asr, "transcribe", spy)
+    lazno["words"] = reci(SR_BEZ_ZNAKOVA)
+    return seen
+
+
+def test_u_prepoznavanje_idu_samo_termini_snimka(lazno, monkeypatch):
+    """Video-4 draft 2: termini iz `sr->fr` drugog projekta izašli su preko
+    tišine na kraju snimka. Prevodni parovi idu samo u prevod."""
+    seen = _spy_terms(lazno, monkeypatch)
+    cfg.write_json(cfg.job_glossary_path("p"), {
+        "sr->fr": {"Kamp": "Camp"}, "sr->en": {"Kamp": "Camp"},
+        cfg.RECORDING_TERMS_KEY.format(lang="sr"): {"Valjevo": "Valjevo"},
+    })
+    _, _, log, _ = pokreni(lazno, "sr")
+    assert seen["terms"] == ["Valjevo"]
+    assert "glosar projekta: 1 termina ide u prepoznavanje" in log
+
+
+def test_bez_termina_snimka_nema_nagovestaja(lazno, monkeypatch):
+    seen = _spy_terms(lazno, monkeypatch)
+    cfg.write_json(cfg.job_glossary_path("p"), {"sr->fr": {"Kamp": "Camp"}})
+    pokreni(lazno, "sr")
+    assert seen["terms"] == []
+
+
+@pytest.mark.parametrize("izbor, ocekivano", [("none", {}), ("default", {"sr->fr": {"Kamp": "Camp"}})])
+def test_komandna_linija_postuje_podesavanje_glosara(lazno, monkeypatch, izbor, ocekivano):
+    """Do kruga 23 CLI i uvoz SRT-a su uvek kopirali podrazumevani glosar."""
+    _spy_terms(lazno, monkeypatch)
+    cfg.save_glossary({"sr->fr": {"Kamp": "Camp"}})
+    monkeypatch.setattr(cfg, "new_project_glossary", lambda: izbor)
+    assert not cfg.job_glossary_path("p").exists()
+    pokreni(lazno, "sr")
+    assert cfg.job_glossary("p") == ocekivano

@@ -309,6 +309,27 @@ def test_produzavanje_ne_gazi_sledeci_cue(profil):
     assert cues[1].s - cues[0].e >= profil.min_gap - 1e-6
 
 
+def test_reci_nultog_trajanja_ne_daju_cue_ove_koji_se_preklapaju():
+    """Krug 23, Video-4 draft 2: tri cue-a izmišljene rečenice na istom
+    trenutku — dva su izlazila sa istim vremenima, preko trećeg."""
+    digital = Profile(name="digital", max_chars_per_line=28, max_lines=1,
+                      min_chars_per_line=14, min_duration=0.5, max_duration=4.0)
+    raspon = [(43.46, 44.86), (44.86, 44.86), (44.86, 44.86), (44.86, 46.031),
+              (46.14, 47.891), (48.1, 48.1)]
+    cues = apply_timing([Cue(s=s, e=e, lines=["x"]) for s, e in raspon], digital)
+    for a, b in zip(cues, cues[1:]):
+        assert b.s >= a.e + digital.min_gap - 1e-6, (a, b)
+    assert all(c.e > c.s for c in cues)
+    assert len({(c.s, c.e) for c in cues}) == len(cues)
+    assert cues[0].s == 43.46 and cues[-1].e == 48.6  # ivice se ne pomeraju
+
+
+def test_razmak_bez_preklapanja_ne_pomera_normalan_pocetak(profil):
+    cues = [Cue(s=0.0, e=2.0, lines=["A"]), Cue(s=2.01, e=4.0, lines=["B"])]
+    apply_timing(cues, profil)
+    assert cues[1].s == 2.01  # skraćuje se prethodni, sledeći ostaje
+
+
 def test_indeksi_su_redom(profil):
     cues = [Cue(s=0.0, e=2.0, lines=["A"]), Cue(s=3.0, e=5.0, lines=["B"])]
     apply_timing(cues, profil)

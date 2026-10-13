@@ -16,6 +16,7 @@ import asyncio
 import html
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -48,6 +49,7 @@ from ..pipeline import default_profile_for, is_srt_job, resolve_profile
 from ..segment import NO_SPACE_BEFORE
 from ..srt import timestamp
 from ..translit import BISCRIPTAL_LANGUAGES
+from ..untranslated import plural
 from . import db
 
 HERE = Path(__file__).resolve().parent
@@ -532,7 +534,7 @@ def job_glossary_info(job_id: str, lang: str | None) -> dict[str, Any]:
     """Šta je glosar posla — za prikaz, jer ulazi u prepoznavanje."""
     own = cfg.job_glossary_path(job_id).exists()
     gloss = cfg.job_glossary(job_id)
-    asr_terms = cfg.glossary_keys(gloss, lang) if lang else []
+    asr_terms = cfg.recording_terms(gloss, lang) if lang else []
     return {
         "own": own,
         "asr_terms": asr_terms,
@@ -628,9 +630,20 @@ def job_summary(job_id: str) -> dict[str, Any] | None:
 SCRIPT_NAMES = {"Latn": "latinica", "Cyrl": "ćirilica"}
 
 
-def output_files(job_id: str) -> list[dict[str, Any]]:
+_SRT_START_RE = re.compile(r"^(\d+):(\d\d):(\d\d),(\d{3}) -->", re.M)
+
+
+def _cue_starts(text: str) -> list[float]:
+    return [int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
+            for h, m, s, ms in _SRT_START_RE.findall(text)]
+
+
+def output_files(
+    job_id: str, invented: list[dict[str, Any]] | None = None
+) -> list[dict[str, Any]]:
     """Gotovi fajlovi: ime, oznaka jezika i pisma iz BCP-47 dela imena, broj
-    cue-ova i veličina."""
+    cue-ova i veličina. Uz `invented` (`invented_sentences`) i broj natpisa
+    koji počinju u izmišljenoj rečenici — prevod je na istim vremenima."""
     out = cfg.job_dir(job_id) / "out"
     if not out.exists():
         return []
@@ -640,12 +653,17 @@ def output_files(job_id: str) -> list[dict[str, Any]]:
         lang, _, script = tag.partition("-")
         label = f"{lang} · {SCRIPT_NAMES.get(script, script)}" if script else lang
         try:
-            cues = p.read_text(encoding="utf-8-sig", errors="replace").count("-->")
+            text = p.read_text(encoding="utf-8-sig", errors="replace")
         except OSError:  # pragma: no cover
-            cues = None
+            text = None
+        starts = _cue_starts(text) if text is not None and invented else []
         files.append({
             "name": p.name, "size_kb": round(p.stat().st_size / 1024, 1),
-            "label": label or "srt", "cues": cues,
+            "label": label or "srt", "cues": text.count("-->") if text is not None else None,
+            "invented": sum(
+                1 for t in starts
+                if any(v["s"] - 0.001 <= t <= v["e"] + 0.001 for v in invented or [])
+            ),
         })
     return files
 
@@ -681,6 +699,38 @@ def halluc_items(
                 run = []
         close(run, sent.id)
     return out
+
+
+def invented_sentences(
+    sf: SentencesFile | None, tokens: dict[int, list[dict[str, Any]]]
+) -> list[dict[str, Any]]:
+    """Rečenice sa bar jednim nizom reči bez zvuka — CELE, ne samo uhvaćene
+    reči. Pravilo hvata reči nultog trajanja; izmišljena rečenica ume da ima i
+    reči sa razvučenim vremenima (krug 23, Video-4 draft 2: 13 reči, uhvaćeno
+    10), a izmišljena je cela. Ista brojka ide u traku i u „Za preuzimanje"."""
+    out: list[dict[str, Any]] = []
+    if not sf:
+        return out
+    for sent in sf.sentences:
+        toks = tokens.get(sent.id) or []
+        words = [t for t in toks if any(ch.isalnum() for ch in t["w"])]
+        caught = sum(1 for t in words if t.get("halluc"))
+        if caught:
+            out.append({
+                "sentence": sent.id, "words": len(words), "caught": caught,
+                "at": timecode(toks[0].get("s", 0.0)),
+                "s": toks[0].get("s", 0.0), "e": max(t.get("e", 0.0) for t in toks),
+            })
+    return out
+
+
+def job_invented(job_id: str, language: str | None) -> list[dict[str, Any]]:
+    """`invented_sentences` izvornog prepisa — i kad je na ekranu prevod:
+    prevod izmišljene rečenice je isto izmišljen."""
+    if not language or is_srt_job(job_id):
+        return []
+    sf = load_sentences(job_id, language)
+    return invented_sentences(sf, marked_tokens(sf, job_id)) if sf else []
 
 
 def tokens_to_text(tokens: list[dict[str, Any]]) -> str:
@@ -721,7 +771,7 @@ def marked_tokens(sf: SentencesFile, job_id: str) -> dict[int, list[dict[str, An
             continue
         aligned, _ = align_text_to_words(sent.text, sw)
         out[sent.id] = [
-            {"w": w.w, "p": w.p, "s": w.s, "low": w.p < LOW_CONFIDENCE,
+            {"w": w.w, "p": w.p, "s": w.s, "e": w.e, "low": w.p < LOW_CONFIDENCE,
              "halluc": word_key(w) in halluc_keys}
             for w in aligned
         ]
@@ -792,6 +842,7 @@ def dec(value: Any) -> str:
 
 templates.env.filters["timecode"] = timecode
 templates.env.filters["dec"] = dec
+templates.env.filters["plural"] = lambda n, one, few, many: plural(n, one, few, many)
 
 from .. import __version__ as VERSION  # noqa: E402 — potpis u podnožju (base.html)
 
@@ -1329,6 +1380,8 @@ def job_page(request: Request, job_id: str, lang: str | None = None) -> Any:
             rows.append(row)
 
     halluc = halluc_items(sf, tokens) if sf and not is_translation else []
+    invented = (invented_sentences(sf, tokens) if not is_translation
+                else job_invented(job_id, job["language"]))
     return templates.TemplateResponse(
         request,
         "job.html",
@@ -1339,6 +1392,7 @@ def job_page(request: Request, job_id: str, lang: str | None = None) -> Any:
             "langs_label": languages_label(job_id, job["language"]),
             "halluc_items": halluc,
             "halluc_words": sum(h["words"] for h in halluc),
+            "invented": invented,
             "status_pills": STATUS_PILLS,
             "retry": [TASK_LABELS.get(t["kind"], t["kind"]) for t in db.retryable_tasks(job_id)]
                      if job["status"] == "error" else [],
@@ -1349,7 +1403,7 @@ def job_page(request: Request, job_id: str, lang: str | None = None) -> Any:
             "sf": sf,
             "rows": rows,
             "low_rows": sum(1 for r in rows if "low_confidence" in r["flags"]),
-            "outputs": output_files(job_id),
+            "outputs": output_files(job_id, invented),
             "pending": db.pending_task(job_id) is not None,
             "task_summary": db.job_task_summary(job_id),
             "bad_tasks": db.rows_to_dicts(db.failed_tasks(job_id)),
@@ -1687,13 +1741,15 @@ def rebuild_now(
     sf = load_sentences(job_id, language)
     preview = preview_by_sentence(job_id, language) if sf else {}
     srt_job = is_srt_job(job_id)
+    invented = job_invented(job_id, job["language"])
     return templates.TemplateResponse(request, "_rebuild.html", {
         "oob": True,
         "error": error,
         "job": job,
         "active": language,
         "rows": [{"id": x.id, "preview": preview.get(x.id, [])} for x in (sf.sentences if sf else [])],
-        "outputs": output_files(job_id),
+        "outputs": output_files(job_id, invented),
+        "invented": invented,
         "built": last_build(job_id, language),
         "srt_job": srt_job,
         "disk": job_disk(job_id),

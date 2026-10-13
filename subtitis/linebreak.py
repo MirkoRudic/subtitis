@@ -153,6 +153,65 @@ PAUSE_BREAK_DISCOUNT = 0
 PENALTY_BREAK_WITHOUT_PAUSE = 0
 
 
+#: Pauza na granici na kojoj rez nije dozvoljen — iza predloga, enklitike,
+#: negacije ili veznika, ili ispred enklitike — nije granica misli nego
+#: oklevanje: govornik udahne, sintagma se nastavlja (krug 22: jača kazna ->
+#: češći kraj natpisa na `i`, `ali`, `a`, `pa`, `da`). Šta se sa njom radi:
+#: "keep" — ostaje gde je; "drop" — ne ulazi ni u jedan mehanizam; "move" —
+#: pripisuje se granici ispred te reči, a ispred enklitike se odbacuje.
+#: Mereno u krugu 23 (dnevnik, 2026-10-13): lažnih je 35–45 % pauza, i uz
+#: `drop` u `tv` krajeva natpisa na vezniku više nema (12 -> 0), čitanje
+#: 6 : 11 -> 9 : 5 — ispod 3 : 1, a natpisa sa pauzom po merilu (tišina u
+#: rasponu govora) ne biva manje ni u jednom obliku. Ostaje "keep", kao i
+#: težine iznad.
+PAUSE_AT_FUNCTION_WORD = "keep"
+
+#: Srpski veznik koji nije u `SR_CONJUNCTIONS` (strana preloma se za njega ne
+#: meri), a govornik posle njega zastaje (krug 22: `a / posebno`).
+SR_PAUSE_FALSE_EXTRA = frozenset({"a"})
+
+
+def false_pause_at(words: list[Word], k: int, rules: LanguageRules) -> str | None:
+    """Da li je pauza upisana na token k lažna: "left" ako je iza reči na kojoj
+    natpis ne sme da se završi, "right" ako je ispred enklitike, inače None.
+    Pauza upisana na interpunkciju je na zarezu — granica klauze, prava."""
+    if k + 1 >= len(words) or _is_punct(words[k].w):
+        return None
+    left = _norm(words[k].w)
+    extra = SR_PAUSE_FALSE_EXTRA if rules.code == "sr" else frozenset()
+    if left in rules.no_line_end or left in rules.conjunctions or left in extra:
+        return "left"
+    if _norm(words[k + 1].w) in rules.no_line_start:
+        return "right"
+    return None
+
+
+def adjust_pauses(
+    words: list[Word], pauses: list[float], rules: LanguageRules, mode: str
+) -> list[float]:
+    """Primeni `PAUSE_AT_FUNCTION_WORD` na pauze po tokenu (`boundary_pauses`)."""
+    if mode == "keep":
+        return pauses
+    out = list(pauses)
+    for k, p in enumerate(pauses):
+        if not p:
+            continue
+        kind = false_pause_at(words, k, rules)
+        if kind is None:
+            continue
+        out[k] = 0.0
+        if mode != "move" or kind != "left":
+            continue
+        # granica ispred reči k je upisana na token k-1; ako je i ona lažna
+        # (`i u` -> pauza posle `u`), ide se dalje nazad
+        j = k - 1
+        while j >= 0 and false_pause_at(words, j, rules) == "left":
+            j -= 1
+        if j >= 0:
+            out[j] = max(out[j], p)
+    return out
+
+
 def pauses_enabled() -> bool:
     """Da li prelamanje uopšte koristi pauze — bez toga se zvuk ne čita."""
     return bool(PENALTY_PAUSE_IN_CUE or PAUSE_BREAK_DISCOUNT or PENALTY_BREAK_WITHOUT_PAUSE)
@@ -712,7 +771,10 @@ def layout_sentence(
     if silences is not None:
         from .pauses import boundary_pauses
 
-        pauses = boundary_pauses(words, silences)
+        pauses = adjust_pauses(
+            words, boundary_pauses(words, silences), rules or LANGUAGE_RULES["sr"],
+            PAUSE_AT_FUNCTION_WORD,
+        )
     span = _Span(words, profile, rules or LANGUAGE_RULES["sr"], terms, pauses)
     n = span.n
     capacity = profile.max_chars_per_line * profile.max_lines
@@ -795,6 +857,14 @@ def layout_sentence(
 # ==========================================================================
 
 
+#: Najkraći cue koji `apply_timing` ostavlja kad mesta nema (prijavljuje se
+#: kao prekratak, `too_short`).
+MIN_CUE_SECONDS = 0.05
+
+#: Vremena se zaokružuju na ms; razlika ispod pola ms nije preklapanje.
+ROUNDING_SLACK = 0.0005
+
+
 def apply_timing(cues: list[Cue], profile: Profile) -> list[Cue]:
     """Produži prekratke cue-ove i obezbedi `min_gap` između susednih."""
     n = len(cues)
@@ -810,15 +880,25 @@ def apply_timing(cues: list[Cue], profile: Profile) -> list[Cue]:
             floor = cues[idx - 1].e + profile.min_gap if idx > 0 else 0.0
             cue.s = round(max(floor, cue.e - need), 3)
 
+    # Razmak, pa redosled bez preklapanja. Reči nultog trajanja (izmišljen tekst,
+    # `hallucination`) daju više cue-ova na ISTOM trenutku: tu nema mesta ni
+    # napred ni nazad, korak 2 gore ume da stavi početak iza kraja, a samo
+    # skraćivanje prethodnog nije dovoljno. Bez guranja početka unapred
+    # izlazila su dva cue-a sa istim vremenima preko trećeg (krug 23,
+    # Video-4 draft 2: #17 i #18 `44,943–44,993`, #19 od 44,86).
     for idx in range(1, n):
         prev, cur = cues[idx - 1], cues[idx]
         if cur.s - prev.e < profile.min_gap:
-            prev.e = round(max(prev.s + 0.05, cur.s - profile.min_gap), 3)
+            prev.e = round(max(prev.s + MIN_CUE_SECONDS, cur.s - profile.min_gap), 3)
+        if cur.s < prev.e + profile.min_gap - ROUNDING_SLACK:
+            cur.s = round(prev.e + profile.min_gap, 3)
+        if cur.e < cur.s + MIN_CUE_SECONDS:
+            cur.e = round(cur.s + MIN_CUE_SECONDS, 3)
 
     for idx, cue in enumerate(cues, start=1):
         cue.index = idx
         if cue.e <= cue.s:
-            cue.e = round(cue.s + 0.05, 3)
+            cue.e = round(cue.s + MIN_CUE_SECONDS, 3)
     return cues
 
 
