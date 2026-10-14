@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import difflib
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Callable
 
 from . import config as cfg
@@ -156,14 +156,13 @@ PENALTY_BREAK_WITHOUT_PAUSE = 0
 #: Pauza na granici na kojoj rez nije dozvoljen — iza predloga, enklitike,
 #: negacije ili veznika, ili ispred enklitike — nije granica misli nego
 #: oklevanje: govornik udahne, sintagma se nastavlja (krug 22: jača kazna ->
-#: češći kraj natpisa na `i`, `ali`, `a`, `pa`, `da`). Šta se sa njom radi:
-#: "keep" — ostaje gde je; "drop" — ne ulazi ni u jedan mehanizam; "move" —
-#: pripisuje se granici ispred te reči, a ispred enklitike se odbacuje.
-#: Mereno u krugu 23 (dnevnik, 2026-10-13): lažnih je 35–45 % pauza, i uz
-#: `drop` u `tv` krajeva natpisa na vezniku više nema (12 -> 0), čitanje
-#: 6 : 11 -> 9 : 5 — ispod 3 : 1, a natpisa sa pauzom po merilu (tišina u
-#: rasponu govora) ne biva manje ni u jednom obliku. Ostaje "keep", kao i
-#: težine iznad.
+#: češći kraj natpisa na `i`, `ali`, `a`, `pa`, `da`). "keep" — ostaje;
+#: "discard" — ne ulazi ni u jedan mehanizam pauze.
+#: Krug 23 (dnevnik, 2026-10-13): lažnih je 35–45 % pauza; uz "discard" u
+#: `tv` krajeva natpisa na vezniku 12 -> 0, čitanje 6 : 11 -> 9 : 5.
+#: Treća varijanta, premeštanje pauze na granicu ispred te reči, merena je i
+#: izbačena (krug 24): čita se isto (9 : 5), a ostavlja 1 kraj na vezniku
+#: prema 0 — složenija, bez dobiti.
 PAUSE_AT_FUNCTION_WORD = "keep"
 
 #: Srpski veznik koji nije u `SR_CONJUNCTIONS` (strana preloma se za njega ne
@@ -192,24 +191,7 @@ def adjust_pauses(
     """Primeni `PAUSE_AT_FUNCTION_WORD` na pauze po tokenu (`boundary_pauses`)."""
     if mode == "keep":
         return pauses
-    out = list(pauses)
-    for k, p in enumerate(pauses):
-        if not p:
-            continue
-        kind = false_pause_at(words, k, rules)
-        if kind is None:
-            continue
-        out[k] = 0.0
-        if mode != "move" or kind != "left":
-            continue
-        # granica ispred reči k je upisana na token k-1; ako je i ona lažna
-        # (`i u` -> pauza posle `u`), ide se dalje nazad
-        j = k - 1
-        while j >= 0 and false_pause_at(words, j, rules) == "left":
-            j -= 1
-        if j >= 0:
-            out[j] = max(out[j], p)
-    return out
+    return [0.0 if p and false_pause_at(words, k, rules) else p for k, p in enumerate(pauses)]
 
 
 def pauses_enabled() -> bool:
@@ -266,6 +248,15 @@ SR_CLITICS = frozenset({
     "bi", "bih", "bismo", "biste", "je", "su", "sam", "si", "smo", "ste",
     "ću", "ćeš", "će", "ćemo", "ćete", "se", "ga", "mu", "joj", "ih", "im",
 })
+
+#: Lične zamenice u nominativu (`mi`, `vi`, `ti` su i enklitike dativa —
+#: i tada se drže reči uz koju idu). Krug 24.
+SR_PERSONAL_PRONOUNS = frozenset({"ja", "ti", "on", "ona", "ono", "mi", "vi", "oni", "one"})
+
+#: Rez odmah iza lične zamenice: zamenica ostaje bez svog glagola. Subjekat
+#: koji nije zamenica (`naš odgovor / treba`) se ovako ne vidi — za to bi
+#: trebala sintaksa, a ne lista reči. Mereno u krugu 24 (dnevnik).
+PENALTY_SPLIT_PRONOUN = 0
 
 #: Gruba heuristika za pridev: tipični nastavci pridevske promene.
 SR_ADJECTIVE_SUFFIXES = (
@@ -601,6 +592,11 @@ class _Span:
         if right in rules.no_line_start:
             pen += PENALTY_SPLIT_COMPOUND_VERB
 
+        # lična zamenica odvojena od svog glagola (`mi / nikome nećemo`)
+        if (PENALTY_SPLIT_PRONOUN and rules.code == "sr"
+                and left in SR_PERSONAL_PRONOUNS and right and not _is_punct(nxt)):
+            pen += PENALTY_SPLIT_PRONOUN
+
         if (
             _looks_adjective(tok, rules)
             and right
@@ -900,6 +896,92 @@ def apply_timing(cues: list[Cue], profile: Profile) -> list[Cue]:
         if cue.e <= cue.s:
             cue.e = round(cue.s + MIN_CUE_SECONDS, 3)
     return cues
+
+
+# ==========================================================================
+# Vreme natpisa po tišini (krug 24)
+# ==========================================================================
+#
+# Whisper tišinu upija u reč (krug 23: 96 od 100 tišina ≥ 0,30 s leži u
+# trajanju reči), pa natpis koji počinje ili se završava takvom reči stoji na
+# ekranu nad tišinom. Prelom to ne može da popravi — rez je između reči. Ovde
+# se pomera VREME: početak natpisa na kraj tišine koja ga otvara, kraj na
+# početak tišine koja ga zatvara. Svaka ivica se pomera cela ili nikako.
+
+#: Najkraća tišina koja pomera ivicu natpisa.
+SNAP_SILENCE_MIN = 0.30
+
+#: Najkraći prazan ekran koji pomeranje sme da napravi (kraće treperi), ili
+#: None — mehanizam isključen. Mereno u krugu 24 (dnevnik, 2026-10-14):
+#: ograničenja drži (CPS isti, preklapanja 0), natpisa sa pauzom `tv` 41 -> 36,
+#: `web` 53 -> 38; mrtvo vreme raste tačno koliko teksta nad tišinom nestane.
+#: Uključivanje je odluka, ne ishod merenja — ostaje isključeno.
+SNAP_MIN_BLANK: float | None = None
+
+#: Tišina „otvara" natpis ako počinje najviše ovoliko posle njegovog početka
+#: (i simetrično za kraj) — reč pre tišine ume da ima par desetinki zvuka.
+SNAP_EDGE_SLACK = 0.10
+
+
+@dataclass
+class SnapReport:
+    """Šta je `snap_to_silences` uradio — za dnevnik posla i merenje."""
+
+    starts: list[tuple[int, float]] = field(default_factory=list)  # (cue, pomeraj s)
+    ends: list[tuple[int, float]] = field(default_factory=list)
+    rejected: dict[str, int] = field(default_factory=lambda: {"trajanje": 0, "cps": 0, "praznina": 0})
+
+
+def snap_to_silences(
+    cues: list[Cue], silences: list[tuple[float, float]], profile: Profile,
+    *, min_blank: float, min_silence: float = SNAP_SILENCE_MIN,
+) -> SnapReport:
+    """Pomeri ivice natpisa na ivice tišine (posle `apply_timing`).
+
+    Ivica se ne pomera ako bi natpis pao ispod `min_duration`, prešao
+    `max_cps`, ili ako bi prazan ekran do susednog natpisa bio kraći od
+    `min_blank` (treperenje je gore od teksta nad tišinom). Preklapanje ne
+    može da nastane: početak ide samo napred, kraj samo nazad.
+    """
+    rep = SnapReport()
+    chars = [sum(len(l) for l in c.lines) for c in cues]
+
+    def why_not(k: int, s: float, e: float, edge: str) -> str | None:
+        dur = e - s
+        if dur < profile.min_duration - 1e-9:
+            return "trajanje"
+        if chars[k] / dur > profile.max_cps + 1e-9:
+            return "cps"
+        # samo praznina koju pravi OVO pomeranje; postojeći razmak sa druge
+        # strane (`min_gap` unutar rečenice) nije njegov
+        if edge == "s" and k > 0 and s - cues[k - 1].e < min_blank - 1e-9:
+            return "praznina"
+        if edge == "e" and k + 1 < len(cues) and cues[k + 1].s - e < min_blank - 1e-9:
+            return "praznina"
+        return None
+
+    for k, c in enumerate(cues):
+        for a, b in silences:
+            if b - a < min_silence:
+                continue
+            # tišina otvara natpis: počinje pre (ili tik posle) početka, traje
+            # bar prag u natpisu, a posle nje u natpisu ima govora
+            if a <= c.s + SNAP_EDGE_SLACK and b - c.s >= min_silence and b < c.e:
+                reason = why_not(k, round(b, 3), c.e, "s")
+                if reason:
+                    rep.rejected[reason] += 1
+                else:
+                    rep.starts.append((k, round(b - c.s, 3)))
+                    c.s = round(b, 3)
+            # tišina zatvara natpis
+            elif b >= c.e - SNAP_EDGE_SLACK and c.e - a >= min_silence and a > c.s:
+                reason = why_not(k, c.s, round(a, 3), "e")
+                if reason:
+                    rep.rejected[reason] += 1
+                else:
+                    rep.ends.append((k, round(c.e - a, 3)))
+                    c.e = round(a, 3)
+    return rep
 
 
 def too_short(cues: list[Cue], profile: Profile) -> list[Cue]:

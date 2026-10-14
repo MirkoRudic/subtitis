@@ -758,3 +758,87 @@ Ishod: **ne uvodi se** — merilo ne pada ni u jednom obliku, a čitanje `tv`
 težine 0, kao posle kruga 19. Zapažanje, ne zaključak: dokle god reči upijaju
 tišinu, ono što gledalac vidi menja samo vreme natpisa (kraj natpisa na
 početku tišine, početak sledećeg na njenom kraju), ne prelom.
+
+## Obrazac: mera koju mehanizam ne može da promeni nije kriterijum (2026-10-14)
+
+Tišina leži unutar reči (krug 23: 96 od 100 tišina ≥ 0,30 s), a rez pada
+između reči — nijedan prelom ne može da izbaci tišinu iz natpisa, po
+konstrukciji. Krugovi 19, 22 i 23 su merili prelom protiv mere „natpis
+sadrži pauzu", koju prelom ne može da promeni. Pre nego što se mera postavi,
+proveri se da li mehanizam uopšte ima pristup onome što se meri.
+
+Isto važi u krugu 24 i za „mrtvo vreme": kad se početak natpisa pomeri na
+kraj tišine, prazan ekran poraste tačno onoliko koliko teksta nad tišinom
+nestane (do 0,1 s po natpisu razlike, `SNAP_EDGE_SLACK`). To je ista
+veličina gledana s druge strane, ne cena koja može da obori mehanizam.
+
+## Obrazac: kriterijum koji obori popravku pet puta nije strog nego pogrešan (2026-10-14)
+
+„Nijedna mera ne sme da poraste" je oborio popravku u krugovima 19, 20, 22
+i 23 (dvaput), a čitanje nije bilo sporno ili je mera bila van dometa
+mehanizma. Pravilo ima smisla samo za mere koje mehanizam dira. Mere koje
+ne dira idu u izveštaj kao kontekst, ne kao uslov.
+
+## 2026-10-14 — Krug 24: vreme natpisa po tišini
+
+`linebreak.snap_to_silences`, `scripts/krug24_vreme.py`. Posle
+`apply_timing`: tišina ≥ 0,30 s koja otvara natpis (počinje najviše 0,1 s
+posle njegovog početka) pomera početak na svoj kraj; tišina koja ga zatvara
+pomera kraj na svoj početak. Ivica se pomera cela ili nikako; odbija se ako
+bi natpis pao ispod `min_duration`, prešao `max_cps`, ili ako bi prazan
+ekran koji pravi to pomeranje bio kraći od minimuma.
+
+Skup: 8 poslova sa zvukom (još 3 su izgubila `source.wav` po roku posle
+kruga 23), tišine iz zvuka u memoriji. Prelom današnji (pauze isključene).
+Oba minimuma praznine (0,20 i 0,40 s) daju ISTO: pomeren početak pravi
+prazninu od bar praga tišine plus postojećeg razmaka (0,30 + 0,083), pa
+minimum do 0,38 s ne može da odbije ništa.
+
+| | `tv` pre | `tv` posle | `web` pre | `web` posle |
+|---|---|---|---|---|
+| natpisa sa pauzom (merilo kruga 23) | 41 / 72 (56,9 %) | 36 (50,0 %) | 53 / 139 (38,1 %) | 42 (30,2 %) |
+| — pauza na početku / kraju / u sredini | 9 / 0 / 32 | 0 / 0 / 36 | 13 / 2 / 38 | 2 / 0 / 40 |
+| pomeren početak / skraćen kraj | — | 9 / 0 | — | 11 / 2 |
+| pomeraj prosek / najveći | — | 0,54 / 0,88 s | — | 0,60 / 0,88 s |
+| odbijeno: trajanje / CPS / praznina | — | 0 / 0 / 0 | — | 0 / 2 / 0 |
+| preko CPS | 1 | 1 | 5 | 5 |
+| preklapanja | 0 | 0 | 0 | 0 |
+| mrtvo vreme | 27,03 s | 31,89 s | 32,85 s | 40,60 s |
+| tekst nad tišinom | 40,00 s | 35,43 s | 39,70 s | 32,31 s |
+
+Whisper tišinu stavlja na POČETAK sledeće reči: tišina na kraju natpisa je
+retka (0 i 2), na početku je 9 i 13 — i tu mehanizam skida sve što
+ograničenja puštaju. Tišina u sredini natpisa (32 i 38) ostaje: ni prelom ni
+vreme ivica do nje ne dopiru. Ograničenja drži; da li je prazan ekran za
+vreme tišine bolji od teksta pre govora je odluka o izgledu — mehanizam je
+u kodu isključen (`SNAP_MIN_BLANK = None`). Uključen, čita samo postojeći
+`pauses.json`; bez njega se preskače i to piše u izveštaju posla.
+
+## 2026-10-14 — Krug 24: kazna za zamenicu, filter pauze u dvorednom prelomu
+
+Kazne za subjekat odvojen od predikata NEMA i ne može je biti bez sintakse:
+subjekat je imenička grupa (oblika `cela ta priča / mora`), a alat ima
+samo liste reči. Za ličnu zamenicu ispred glagola može: `PENALTY_SPLIT_PRONOUN`
+za rez iza `ja ti on ona ono mi vi oni one`.
+
+Sama, bez pauza, kazna 25 / 50 / 100 ne menja nijednu rečenicu ni u `tv` ni
+u `web`. Uz tačku kruga 23 u `tv` (`PAUSE_MIN` 0,12, `PENALTY_PAUSE_IN_CUE`
+100 do najviše 50, `PAUSE_BREAK_DISCOUNT` 50, `PENALTY_BREAK_WITHOUT_PAUSE`
+0, `PAUSE_AT_FUNCTION_WORD` "discard") već 25 uklanja jedini natpis
+završen zamenicom — ta rečenica se vraća na prelom bez pauza.
+
+Čitanje na 8 poslova sa zvukom: **5 : 2 : 5**, bez ponovljenih snimaka
+**5 : 1 : 3**. Preostalo „gore" (`nije / ni ideološki`) je treći tip, ne
+jedan od dva — u krugu 23 pogrešno svrstan. Dva pogoršanja tipa subjekat /
+predikat iz kruga 23 su u poslovima koji više nemaju zvuk, pa se ne mogu
+izmeriti; ako se ponašaju isto, na skupu kruga 23 bi bilo 8 : 3 (bez
+ponovljenih).
+
+Ishod: **ne uvodi se.** Kao i u svim krugovima do sada, odluka je po broju
+sa ponovljenim snimcima (5 : 2 = 2,5 : 1), a i procena na punom skupu kruga
+23 je ispod 3 : 1. Bez ponovljenih bi prošlo (5 : 1) — to je pitanje kako
+se broji, i nije rešavano ovde. `PENALTY_SPLIT_PRONOUN` ostaje 0, kao i
+težine pauze.
+
+Varijanta „pauza se premešta ispred veznika" je izbačena iz koda: čita se
+isto kao odbacivanje (9 : 5), a ostavlja 1 kraj natpisa na vezniku prema 0.

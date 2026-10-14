@@ -2400,3 +2400,34 @@ def test_ikonica_u_kartici_je_ista_datoteka(web):
     assert "max-age" in r.headers["cache-control"]
     for url in ("/", "/settings", "/kako"):
         assert f'<link rel="icon" href="/favicon.ico?v={__version__}"' in client.get(url).text
+
+
+def test_vreme_po_tisini_bez_pauses_json_se_preskace_i_to_se_vidi(web, monkeypatch):
+    """Krug 24: mehanizam čita samo POSTOJEĆI `pauses.json` — ne pravi ga i ne
+    meri zvuk. Bez fajla se preskače i to piše ispod „Za preuzimanje"."""
+    from subtitis import linebreak as lb
+    from subtitis import pauses, pipeline
+
+    client, db, cfg = web
+    jid = make_job(cfg, db)
+    monkeypatch.setattr(lb, "SNAP_MIN_BLANK", 0.4)
+    pipeline.run_build(jid, profile="tv")
+    page = " ".join(client.get(f"/jobs/{jid}").text.split())
+    assert "Vreme po tišini: preskočeno — posao nema pauses.json." in page
+    assert not pauses.path(jid).exists(), "ne pravi se sam"
+    assert "vreme po tišini: preskočeno" in (cfg.job_dir(jid) / "log.txt").read_text(encoding="utf-8")
+
+    # sa fajlom: tišina na početku je tu, ali bi natpis ostao kraći od 0,833 s
+    cfg.write_json(pauses.path(jid), pauses.PausesFile(silences=[(0.0, 0.4)]).model_dump())
+    pipeline.run_build(jid, profile="tv")
+    page = " ".join(client.get(f"/jobs/{jid}").text.split())
+    assert "Vreme po tišini: 0 početaka pomereno na kraj tišine, 0 krajeva skraćeno" in page
+
+
+def test_bez_ukljucenog_mehanizma_nema_reda_o_vremenu(web):
+    from subtitis import pipeline
+
+    client, db, cfg = web
+    jid = make_job(cfg, db)
+    pipeline.run_build(jid, profile="tv")
+    assert "Vreme po tišini" not in client.get(f"/jobs/{jid}").text

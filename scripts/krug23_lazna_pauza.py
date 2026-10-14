@@ -6,7 +6,7 @@
 Bez argumenta: koliko pauza (pripisanih granici, `pauses.boundary_pauses`)
 pada iza predloga, enklitike, negacije, veznika ili `a`, odnosno ispred
 enklitike — `linebreak.false_pause_at`. Sa `meri`: mreža kruga 19/22 u tri
-načina (`linebreak.PAUSE_AT_FUNCTION_WORD`: keep, drop, move).
+načina (`linebreak.PAUSE_AT_FUNCTION_WORD`: keep, discard; u krugu 23 je merena i varijanta „move", izbačena u krugu 24).
 
 Merilo rezultata od kruga 23 (dnevnik, 2026-10-13): natpis sadrži pauzu ako
 se tišina iz zvuka preklapa sa rasponom govora natpisa (početak prve do kraja
@@ -31,7 +31,7 @@ from subtitis import linebreak as lb  # noqa: E402
 from subtitis import pauses as pz  # noqa: E402
 
 OUT = ROOT / "merenja" / "krug23"  # u .gitignore
-NACINI = ("keep", "drop", "move")
+NACINI = ("keep", "discard")  # "move" izbačen u krugu 24 (dnevnik)
 
 
 def u_govoru(c, sil, thr):

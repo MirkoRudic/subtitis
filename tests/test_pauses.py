@@ -293,33 +293,87 @@ def test_pauza_na_zarezu_je_prava():
     assert lb.false_pause_at(ws, 1, SR) is None  # `,` — granica klauze
 
 
-def test_drop_odbacuje_a_move_prebacuje_ispred_veznika():
-    ws = make_words("hleb i mleko")
-    p = [0.0, 0.6, 0.0]  # pauza posle `i`
+def test_discard_odbacuje_laznu_pauzu_a_pravu_ostavlja():
+    ws = make_words("hleb i mleko grad")
+    p = [0.0, 0.6, 0.0, 0.0]  # pauza posle `i`
     assert lb.adjust_pauses(ws, p, SR, "keep") == p
-    assert lb.adjust_pauses(ws, p, SR, "drop") == [0.0, 0.0, 0.0]
-    assert lb.adjust_pauses(ws, p, SR, "move") == [0.6, 0.0, 0.0]
+    assert lb.adjust_pauses(ws, p, SR, "discard") == [0.0, 0.0, 0.0, 0.0]
+    p = [0.0, 0.0, 0.6, 0.0]  # pauza posle `mleko` — prava
+    assert lb.adjust_pauses(ws, p, SR, "discard") == p
+    ws = make_words("kupili smo hleb")  # ispred enklitike
+    assert lb.adjust_pauses(ws, [0.5, 0.0, 0.0], SR, "discard") == [0.0, 0.0, 0.0]
 
 
-def test_move_preskace_niz_funkcijskih_reci_i_ne_dira_enklitiku():
-    ws = make_words("idemo i u grad")
-    assert lb.adjust_pauses(ws, [0.0, 0.0, 0.5, 0.0], SR, "move") == [0.5, 0.0, 0.0, 0.0]
-    ws = make_words("kupili smo hleb")
-    # ispred enklitike nema kuda nazad: pauza se odbacuje i u `move`
-    assert lb.adjust_pauses(ws, [0.5, 0.0, 0.0], SR, "move") == [0.0, 0.0, 0.0]
-    ws = make_words("i grad")
-    assert lb.adjust_pauses(ws, [0.5, 0.0], SR, "move") == [0.0, 0.0]
+def test_zamenica_kazna_samo_kad_je_ukljucena(monkeypatch):
+    ws = make_words("mi nikome nećemo dati")
+    assert lb._Span(ws, JEDAN_RED, SR, None, None).break_pen[0] == lb.PENALTY_BREAK_NOT_AT_CLAUSE
+    monkeypatch.setattr(lb, "PENALTY_SPLIT_PRONOUN", 25)
+    assert lb._Span(ws, JEDAN_RED, SR, None, None).break_pen[0] == lb.PENALTY_BREAK_NOT_AT_CLAUSE + 25
+    ws = make_words("to smo mi, a ne oni")  # zamenica pred zarezom: tamo se rez ionako ne pravi
+    k = [w.w for w in ws].index("mi")
+    assert lb._Span(ws, JEDAN_RED, SR, None, None).break_pen[k] >= lb.INF
 
 
 def test_kazna_za_pauzu_iza_veznika_vise_ne_vuce_kraj_natpisa_na_veznik(monkeypatch):
-    """Krug 22: jača kazna -> natpis se završava na `i`. Uz `drop` ta pauza ne
+    """Krug 22: jača kazna -> natpis se završava na `i`. Uz `discard` ta pauza ne
     postoji za prelamanje, pa kraj natpisa ostaje gde bi bio bez nje."""
     assert lb.PAUSE_AT_FUNCTION_WORD == "keep"
     monkeypatch.setattr(lb, "PENALTY_PAUSE_IN_CUE", 200)
     ws = make_words(VEZNIK)
     sil = tisina_posle(ws, [w.w for w in ws].index("i"), 0.8)
     assert any(l.endswith(" i") for l in lines(ws, sil))
-    monkeypatch.setattr(lb, "PAUSE_AT_FUNCTION_WORD", "drop")
+    monkeypatch.setattr(lb, "PAUSE_AT_FUNCTION_WORD", "discard")
     assert lines(ws, sil) == lines(ws)
-    monkeypatch.setattr(lb, "PAUSE_AT_FUNCTION_WORD", "move")
-    assert not any(l.endswith(" i") for l in lines(ws, sil))
+
+
+# ==========================================================================
+# Vreme natpisa po tišini (krug 24)
+# ==========================================================================
+
+from subtitis.models import Cue  # noqa: E402
+
+TV = Profile(name="tv", max_chars_per_line=42, max_lines=2, max_cps=20,
+             min_duration=0.833, max_duration=7.0, min_gap=0.083)
+
+
+def _cues(*spans, text="Kratak natpis."):
+    return [Cue(s=s, e=e, lines=[text]) for s, e in spans]
+
+
+def test_pocetak_ide_na_kraj_tisine_kraj_na_pocetak():
+    cs = _cues((0.0, 2.0), (2.083, 5.0), (5.083, 8.0))
+    sil = [(2.0, 2.6), (7.3, 8.2)]  # otvara drugi natpis; zatvara treći
+    rep = lb.snap_to_silences(cs, sil, TV, min_blank=0.4)
+    assert (cs[1].s, cs[1].e) == (2.6, 5.0)
+    assert (cs[2].s, cs[2].e) == (5.083, 7.3)
+    assert rep.starts == [(1, 0.517)] and rep.ends == [(2, 0.7)]
+    for a, b in zip(cs, cs[1:]):
+        assert b.s >= a.e
+
+
+def test_tisina_usred_natpisa_se_ne_dira():
+    cs = _cues((0.0, 4.0))
+    rep = lb.snap_to_silences(cs, [(1.5, 2.5)], TV, min_blank=0.4)
+    assert (cs[0].s, cs[0].e) == (0.0, 4.0) and not rep.starts and not rep.ends
+
+
+@pytest.mark.parametrize("cue, sil, razlog", [
+    ((1.0, 2.2), (0.9, 1.6), "trajanje"),            # ostalo bi 0,6 s < 0,833
+    ((1.0, 3.0), (0.9, 1.9), "cps"),                 # 30 znakova u 1,1 s
+])
+def test_ogranicenja_odbijaju_celo_pomeranje(cue, sil, razlog):
+    tekst = "Trideset znakova tačno ovde ok" if razlog == "cps" else "Kratak natpis."
+    cs = [Cue(s=cue[0], e=cue[1], lines=[tekst])]
+    rep = lb.snap_to_silences(cs, [sil], TV, min_blank=0.4)
+    assert (cs[0].s, cs[0].e) == cue
+    assert rep.rejected[razlog] == 1
+
+
+def test_praznina_gleda_samo_ivicu_koja_se_pomera():
+    """Razmak od 0,083 posle natpisa nije napravilo pomeranje početka."""
+    cs = _cues((0.0, 1.0), (1.083, 4.0), (4.083, 6.0))
+    rep = lb.snap_to_silences(cs, [(1.0, 1.4)], TV, min_blank=0.4)
+    assert cs[1].s == 1.4 and rep.starts  # nova praznina 0,4 — dovoljno
+    cs = _cues((0.0, 1.0), (1.083, 4.0))
+    rep = lb.snap_to_silences(cs, [(1.0, 1.4)], TV, min_blank=0.5)
+    assert cs[1].s == 1.083 and rep.rejected["praznina"] == 1

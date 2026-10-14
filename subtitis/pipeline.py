@@ -516,6 +516,32 @@ def ensure_job_glossary(job_id: str) -> None:
         cfg.write_json(p, cfg.load_glossary() if use_default else {})
 
 
+def _snap_to_silences(job_id: str, cues: list, prof: Any, log: Callable[[str], None]) -> dict:
+    """Vreme natpisa po tišini (krug 24, `linebreak.snap_to_silences`).
+
+    Samo iz POSTOJEĆEG `pauses.json`: ovde se ne meri zvuk i ništa se ne
+    upisuje. Bez fajla (stariji posao, zvuk obrisan pre kruga 19) mehanizam
+    se preskače, a to piše u dnevniku i ispod „Za preuzimanje".
+    """
+    from . import linebreak
+    from . import pauses as pauses_mod
+
+    try:
+        pf = pauses_mod.load(job_id)
+    except Exception as exc:  # noqa: BLE001 — oštećen fajl nije razlog za pad
+        log(f"vreme po tišini: preskočeno — {pauses_mod.PAUSES_FILE} se ne može pročitati ({exc})")
+        return {"skipped": f"{pauses_mod.PAUSES_FILE} se ne može pročitati"}
+    if pf is None:
+        log(f"vreme po tišini: preskočeno — posao nema {pauses_mod.PAUSES_FILE}")
+        return {"skipped": f"posao nema {pauses_mod.PAUSES_FILE}"}
+    rep = linebreak.snap_to_silences(cues, pf.silences, prof, min_blank=linebreak.SNAP_MIN_BLANK)
+    log(
+        f"vreme po tišini: početak pomeren {len(rep.starts)}, kraj skraćen {len(rep.ends)}; "
+        "odbijeno " + ", ".join(f"{k} {v}" for k, v in rep.rejected.items())
+    )
+    return {"starts": len(rep.starts), "ends": len(rep.ends), "rejected": rep.rejected}
+
+
 def is_srt_job(job_id: str) -> bool:
     return (cfg.job_dir(job_id) / CUES_FILE).exists()
 
@@ -1275,6 +1301,8 @@ def run_build(
         )
         if linebreak.pauses_enabled() and not is_translation:
             det["pauses"] = silences is not None
+        if linebreak.SNAP_MIN_BLANK is not None and not is_translation:
+            det["silence_timing"] = _snap_to_silences(job_id, cues, prof, logger)
         # I za `Latn`, ne samo za `Cyrl`: ulazna datoteka ume da bude mešana
         # (stariji poslovi, ručne ispravke), a `convert` je idempotentan — nad
         # tekstom koji je već u traženom pismu ne menja ništa.

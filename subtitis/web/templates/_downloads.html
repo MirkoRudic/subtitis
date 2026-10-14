@@ -32,6 +32,8 @@
         Napravljeno profilom <strong>{{ built.profile }}</strong>, pismo
         {{ built.script }}{% if built.case == 'upper' %}, VELIKA SLOVA{% elif built.case == 'lower' %}, mala slova{% endif %}{% if built.drop_punct %}, bez interpunkcije{% endif %}{% if built.cues %}, {{ built.cues }} cue-ova{% endif %}.
         {% if not disk.has_source and not srt_job %}Radni WAV je obrisan — dugme ▶ ne radi.{% endif %}
+        {% set st = built.silence_timing %}
+        {% if st %}<br>Vreme po tišini: {% if st.skipped %}preskočeno — {{ st.skipped }}.{% else %}{{ st.starts }} {{ st.starts|plural('početak pomeren', 'početka pomerena', 'početaka pomereno') }} na kraj tišine, {{ st.ends }} {{ st.ends|plural('kraj skraćen', 'kraja skraćena', 'krajeva skraćeno') }} na njen početak.{% endif %}{% endif %}
         {% if srt_job and built.overflow_count is not none %}
           {% if built.overflow_count %}
             <span class="err">{{ built.overflow_count }} cue-ova probija profil</span>{% if built.worse_count is not none %},

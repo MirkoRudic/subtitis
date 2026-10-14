@@ -329,6 +329,7 @@ def last_build(job_id: str, lang: str | None) -> dict[str, Any] | None:
                 {**c, "at": timestamp(c["s"])} for c in det.get("too_short") or []
             ],
             "min_duration": _profile_min_duration(det.get("profile")),
+            "silence_timing": det.get("silence_timing"),
         }
     return None
 
