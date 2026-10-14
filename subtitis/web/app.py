@@ -13,6 +13,8 @@ vraća staru podelu na dva procesa.
 from __future__ import annotations
 
 import asyncio
+import functools
+import hashlib
 import html
 import json
 import os
@@ -850,6 +852,34 @@ from .. import version_string  # noqa: E402
 
 templates.env.globals["version"] = VERSION
 templates.env.globals["signature"] = version_string()
+
+
+def static_url(name: str) -> str:
+    """Adresa statičkog fajla sa otiskom sadržaja (`?v=`): kad se fajl
+    promeni, promeni se i adresa, pa brauzer ne drži stari CSS uz nov HTML
+    (krug 25: trake su se preklapale, ikonice ostale gola slova). Otisak se
+    računa po vremenu izmene — izmena u radu se vidi bez restarta."""
+    v = static_version(name)
+    return f"/static/{name}?v={v}" if v else f"/static/{name}"
+
+
+def static_version(name: str) -> str | None:
+    """Otisak sadržaja statičkog fajla; None ako fajla nema."""
+    p = HERE / "static" / name
+    try:
+        st = p.stat()
+    except OSError:
+        return None
+    return _content_hash(str(p), st.st_mtime_ns, st.st_size)
+
+
+@functools.lru_cache(maxsize=64)
+def _content_hash(path: str, mtime_ns: int, size: int) -> str:
+    return hashlib.sha1(Path(path).read_bytes()).hexdigest()[:10]
+
+
+templates.env.globals["static_url"] = static_url
+templates.env.globals["static_version"] = static_version
 
 
 # ==========================================================================

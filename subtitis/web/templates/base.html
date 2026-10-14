@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Subtitis{% endblock %}</title>
   {# Fontovi su lokalni, kao i htmx: alat ne šalje ništa van ovog računara. #}
-  <link rel="stylesheet" href="/static/fonts.css">
-  <link rel="icon" href="/favicon.ico?v={{ version }}" type="image/x-icon">
-  <link rel="stylesheet" href="/static/app.css">
-  <script src="/static/htmx.min.js" defer></script>
+  {# `?v=` je otisak sadržaja (`static_url`): izmena stila menja adresu. #}
+  <link rel="stylesheet" href="{{ static_url('fonts.css') }}">
+  <link rel="icon" href="/favicon.ico?v={{ static_version('subtitis.ico') }}" type="image/x-icon">
+  <link rel="stylesheet" href="{{ static_url('app.css') }}">
+  <script src="{{ static_url('htmx.min.js') }}" defer></script>
 </head>
 <body>
   <header class="topbar">

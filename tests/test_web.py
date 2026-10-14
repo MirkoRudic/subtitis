@@ -2389,8 +2389,9 @@ def test_automatsko_snimanje_kopija_najvise_na_pet_minuta(web):
 
 
 def test_ikonica_u_kartici_je_ista_datoteka(web):
-    """Krug 15: bez oznake i rute pregledač je dobijao 404."""
-    from subtitis import __version__
+    """Krug 15: bez oznake i rute pregledač je dobijao 404. Krug 25: `?v=` je
+    otisak sadržaja ikonice, ne verzija."""
+    from subtitis.web.app import static_version
 
     client, db, cfg = web
     r = client.get("/favicon.ico")
@@ -2399,7 +2400,7 @@ def test_ikonica_u_kartici_je_ista_datoteka(web):
     assert r.content == ico.read_bytes(), "bajt u bajt ista datoteka"
     assert "max-age" in r.headers["cache-control"]
     for url in ("/", "/settings", "/kako"):
-        assert f'<link rel="icon" href="/favicon.ico?v={__version__}"' in client.get(url).text
+        assert f'<link rel="icon" href="/favicon.ico?v={static_version("subtitis.ico")}"' in client.get(url).text
 
 
 def test_vreme_po_tisini_bez_pauses_json_se_preskace_i_to_se_vidi(web, monkeypatch):
@@ -2433,3 +2434,29 @@ def test_bez_ukljucenog_mehanizma_nema_reda_o_vremenu(web, monkeypatch):
     jid = make_job(cfg, db)
     pipeline.run_build(jid, profile="tv")
     assert "Vreme po tišini" not in client.get(f"/jobs/{jid}").text
+
+
+def test_staticki_fajlovi_nose_otisak_sadrzaja(web, monkeypatch, tmp_path):
+    """Krug 25: bez `?v=` brauzer drži stari CSS uz nov HTML i stranica se
+    raspadne. Otisak je iz sadržaja — izmena fajla menja adresu."""
+    import re
+
+    from subtitis.web import app as app_mod
+
+    client, db, cfg = web
+    page = client.get("/").text
+    for name in ("app.css", "fonts.css", "htmx.min.js"):
+        m = re.search(rf'/static/{re.escape(name)}\?v=([0-9a-f]{{10}})"', page)
+        assert m, name
+        assert client.get(f"/static/{name}?v={m.group(1)}").status_code == 200
+    assert re.search(r'/favicon\.ico\?v=[0-9a-f]{10}"', page)
+    assert '"/static/app.css"' not in page, "nijedna adresa bez otiska"
+
+    static = tmp_path / "static"
+    static.mkdir()
+    (static / "app.css").write_text("a{}", encoding="utf-8")
+    monkeypatch.setattr(app_mod, "HERE", tmp_path)
+    prvi = app_mod.static_url("app.css")
+    (static / "app.css").write_text("a{color:red}", encoding="utf-8")
+    assert app_mod.static_url("app.css") != prvi
+    assert app_mod.static_url("nema.css") == "/static/nema.css"
