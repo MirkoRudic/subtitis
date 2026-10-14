@@ -1776,13 +1776,13 @@ def test_zivi_red_bez_primera_iz_titla(web):
 
 @pytest.mark.parametrize("url", ["/", "/settings", "/kako"])
 def test_potpis_u_podnozju_svake_strane(web, url):
-    """Krug 8: verzija se čita sa jednog mesta (`subtitis.__version__`)."""
-    from subtitis import __version__
+    """Krug 8: verzija se čita sa jednog mesta; krug 25: uz krug i commit."""
+    from subtitis import ROUND, __version__
 
     client, db, cfg = web
     page = client.get(url).text
     sign = page.split('<footer class="sign">')[1].split("</footer>")[0]
-    assert f"Mirko + Claude · v{__version__}" in sign
+    assert f"Mirko + Claude · Subtitis {__version__} · krug {ROUND}" in sign
     assert 'href="/kako"' in sign
 
 
@@ -2424,9 +2424,11 @@ def test_vreme_po_tisini_bez_pauses_json_se_preskace_i_to_se_vidi(web, monkeypat
     assert "Vreme po tišini: 0 početaka pomereno na kraj tišine, 0 krajeva skraćeno" in page
 
 
-def test_bez_ukljucenog_mehanizma_nema_reda_o_vremenu(web):
+def test_bez_ukljucenog_mehanizma_nema_reda_o_vremenu(web, monkeypatch):
+    from subtitis import linebreak as lb
     from subtitis import pipeline
 
+    monkeypatch.setattr(lb, "SNAP_MIN_BLANK", None)
     client, db, cfg = web
     jid = make_job(cfg, db)
     pipeline.run_build(jid, profile="tv")

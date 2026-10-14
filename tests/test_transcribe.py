@@ -321,3 +321,25 @@ def test_komandna_linija_postuje_podesavanje_glosara(lazno, monkeypatch, izbor, 
     assert not cfg.job_glossary_path("p").exists()
     pokreni(lazno, "sr")
     assert cfg.job_glossary("p") == ocekivano
+
+
+def test_posao_pamti_cime_je_napravljen(lazno):
+    """Krug 25: verzija, krug i commit u `job.json` svakog novog posla."""
+    from subtitis import ROUND, __version__, made_with
+
+    lazno["words"] = reci(SR_BEZ_ZNAKOVA)
+    pokreni(lazno, "sr")
+    mw = cfg.load_job("p").made_with
+    assert mw["version"] == __version__ and mw["round"] == ROUND
+    assert mw == made_with()
+
+
+def test_verzija_na_komandnoj_liniji():
+    from typer.testing import CliRunner
+
+    from subtitis import ROUND, __version__
+    from subtitis.cli import app
+
+    r = CliRunner().invoke(app, ["--version"])
+    assert r.exit_code == 0
+    assert r.output.startswith(f"Subtitis {__version__} · krug {ROUND}")

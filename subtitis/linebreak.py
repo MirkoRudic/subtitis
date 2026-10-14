@@ -194,9 +194,47 @@ def adjust_pauses(
     return [0.0 if p and false_pause_at(words, k, rules) else p for k, p in enumerate(pauses)]
 
 
-def pauses_enabled() -> bool:
-    """Da li prelamanje uopšte koristi pauze — bez toga se zvuk ne čita."""
-    return bool(PENALTY_PAUSE_IN_CUE or PAUSE_BREAK_DISCOUNT or PENALTY_BREAK_WITHOUT_PAUSE)
+#: Paket pauze za DVOREDNI prelom (`max_lines >= 2`), uveden u krugu 25 —
+#: vezan za oblik kao `conjunction_side_multiline` (krug 21). Jednoredni
+#: (`web`, `digital`) ostaje na vrednostima iznad: tamo se čita 1 : 3.
+#: Mereno u krugu 24 (dnevnik, 2026-10-14): uz "discard" krajeva natpisa na
+#: vezniku 12 -> 0, uz kaznu za zamenicu čitanje 5 : 1 (ponovljeni snimak se
+#: broji jednom, krug 25). Merne skripte ga isključuju (`None`) da bi stari
+#: krugovi ostali ponovljivi.
+PAUSE_MULTILINE: dict[str, float | str] | None = {
+    "PAUSE_MIN": 0.12,
+    "PENALTY_PAUSE_IN_CUE": 100,  # po sekundi, najviše PENALTY_PAUSE_IN_CUE_MAX
+    "PAUSE_BREAK_DISCOUNT": 50,
+    "PENALTY_BREAK_WITHOUT_PAUSE": 0,
+    "PAUSE_AT_FUNCTION_WORD": "discard",
+    "PENALTY_SPLIT_PRONOUN": 25,
+}
+
+
+def pause_params(profile: Profile | None = None) -> dict[str, float | str]:
+    """Važeće vrednosti pauze za oblik: modulske, a za dvoredni `PAUSE_MULTILINE`."""
+    pp: dict[str, float | str] = {
+        "PAUSE_MIN": PAUSE_MIN,
+        "PENALTY_PAUSE_IN_CUE": PENALTY_PAUSE_IN_CUE,
+        "PAUSE_BREAK_DISCOUNT": PAUSE_BREAK_DISCOUNT,
+        "PENALTY_BREAK_WITHOUT_PAUSE": PENALTY_BREAK_WITHOUT_PAUSE,
+        "PAUSE_AT_FUNCTION_WORD": PAUSE_AT_FUNCTION_WORD,
+        "PENALTY_SPLIT_PRONOUN": PENALTY_SPLIT_PRONOUN,
+    }
+    if profile is not None and profile.max_lines >= 2 and PAUSE_MULTILINE:
+        pp.update(PAUSE_MULTILINE)
+    return pp
+
+
+def pauses_enabled(profile: Profile | None = None) -> bool:
+    """Da li prelamanje za ovaj oblik uopšte koristi pauze — bez toga se zvuk
+    ne čita. Bez profila: da li ih koristi ijedan oblik."""
+    def on(pp: dict[str, float | str]) -> bool:
+        return bool(pp["PENALTY_PAUSE_IN_CUE"] or pp["PAUSE_BREAK_DISCOUNT"]
+                    or pp["PENALTY_BREAK_WITHOUT_PAUSE"])
+    if profile is not None:
+        return on(pause_params(profile))
+    return on(pause_params()) or bool(PAUSE_MULTILINE and on({**pause_params(), **PAUSE_MULTILINE}))
 
 #: Gornja granica pretrage — koliko puta više znakova od kapaciteta cue-a
 #: sme da uđe u kandidat-raspon. Samo ograničava DP, ne utiče na izbor.
@@ -254,8 +292,12 @@ SR_CLITICS = frozenset({
 SR_PERSONAL_PRONOUNS = frozenset({"ja", "ti", "on", "ona", "ono", "mi", "vi", "oni", "one"})
 
 #: Rez odmah iza lične zamenice: zamenica ostaje bez svog glagola. Subjekat
-#: koji nije zamenica (`naš odgovor / treba`) se ovako ne vidi — za to bi
+#: koji nije zamenica (`cela ta priča / mora`) se ovako ne vidi — za to bi
 #: trebala sintaksa, a ne lista reči. Mereno u krugu 24 (dnevnik).
+#: NIJE SAMOSTALNA: sama, bez pauza, ne menja nijednu rečenicu ni na 100 —
+#: rez iza zamenice bez pauze prelom ionako ne bira. Uključena je samo u
+#: paketu pauze za dvoredni prelom (`PAUSE_MULTILINE`), jer je tamo pauza
+#: iza zamenice vukla rez (`mi / nikome nećemo`). Bez paketa nema svrhu.
 PENALTY_SPLIT_PRONOUN = 0
 
 #: Gruba heuristika za pridev: tipični nastavci pridevske promene.
@@ -483,6 +525,8 @@ class _Span:
         self.rules = rules
         #: pauza posle tokena k (`pauses.boundary_pauses`); None = bez zvuka
         self.pauses = pauses
+        #: vrednosti pauze i zamenice za OVAJ oblik (`pause_params`)
+        self.pp = pause_params(profile)
         n = len(words)
         self.n = n
 
@@ -572,10 +616,11 @@ class _Span:
         else:
             pen = float(PENALTY_BREAK_NOT_AT_CLAUSE)
             if self.pauses is not None:
-                if self.pauses[k] >= PAUSE_MIN:
-                    pen = max(0.0, pen - PAUSE_BREAK_DISCOUNT)
+                pp = self.pp
+                if self.pauses[k] >= pp["PAUSE_MIN"]:
+                    pen = max(0.0, pen - pp["PAUSE_BREAK_DISCOUNT"])
                 else:
-                    pen += PENALTY_BREAK_WITHOUT_PAUSE
+                    pen += pp["PENALTY_BREAK_WITHOUT_PAUSE"]
 
         left = _norm(tok)
         right = _norm(nxt)
@@ -593,9 +638,9 @@ class _Span:
             pen += PENALTY_SPLIT_COMPOUND_VERB
 
         # lična zamenica odvojena od svog glagola (`mi / nikome nećemo`)
-        if (PENALTY_SPLIT_PRONOUN and rules.code == "sr"
+        if (self.pp["PENALTY_SPLIT_PRONOUN"] and rules.code == "sr"
                 and left in SR_PERSONAL_PRONOUNS and right and not _is_punct(nxt)):
-            pen += PENALTY_SPLIT_PRONOUN
+            pen += self.pp["PENALTY_SPLIT_PRONOUN"]
 
         if (
             _looks_adjective(tok, rules)
@@ -740,11 +785,13 @@ def _best_lines(span: _Span, i: int, j: int) -> tuple[float, list[int]]:
 # ==========================================================================
 
 
-def pause_in_cue_penalty(pause: float) -> float:
+def pause_in_cue_penalty(pause: float, pp: dict[str, float | str] | None = None) -> float:
     """Kazna za cue čija je najveća unutrašnja pauza `pause` sekundi."""
-    if not PENALTY_PAUSE_IN_CUE or pause < PAUSE_MIN:
+    pp = pp or pause_params()
+    w, lo = float(pp["PENALTY_PAUSE_IN_CUE"]), float(pp["PAUSE_MIN"])
+    if not w or pause < lo:
         return 0.0
-    return min(PENALTY_PAUSE_IN_CUE * (pause - PAUSE_MIN), PENALTY_PAUSE_IN_CUE_MAX)
+    return min(w * (pause - lo), PENALTY_PAUSE_IN_CUE_MAX)
 
 
 def layout_sentence(
@@ -769,7 +816,7 @@ def layout_sentence(
 
         pauses = adjust_pauses(
             words, boundary_pauses(words, silences), rules or LANGUAGE_RULES["sr"],
-            PAUSE_AT_FUNCTION_WORD,
+            str(pause_params(profile)["PAUSE_AT_FUNCTION_WORD"]),
         )
     span = _Span(words, profile, rules or LANGUAGE_RULES["sr"], terms, pauses)
     n = span.n
@@ -806,7 +853,7 @@ def layout_sentence(
                 and chars < MIN_CUE_CHARS
             ):
                 cost += (MIN_CUE_CHARS - chars) * PENALTY_SHORT_CUE
-            cost += pause_in_cue_penalty(inner_pause)
+            cost += pause_in_cue_penalty(inner_pause, span.pp)
             if j < n:
                 cost += span.break_pen[j - 1]
             edges[i].append((j, cost, cuts))
@@ -914,9 +961,16 @@ SNAP_SILENCE_MIN = 0.30
 #: Najkraći prazan ekran koji pomeranje sme da napravi (kraće treperi), ili
 #: None — mehanizam isključen. Mereno u krugu 24 (dnevnik, 2026-10-14):
 #: ograničenja drži (CPS isti, preklapanja 0), natpisa sa pauzom `tv` 41 -> 36,
-#: `web` 53 -> 38; mrtvo vreme raste tačno koliko teksta nad tišinom nestane.
-#: Uključivanje je odluka, ne ishod merenja — ostaje isključeno.
-SNAP_MIN_BLANK: float | None = None
+#: `web` 53 -> 42; mrtvo vreme raste tačno koliko teksta nad tišinom nestane
+#: (isti broj s druge strane, ne cena). Uključeno u krugu 25, odlukom.
+SNAP_MIN_BLANK: float | None = 0.40
+
+#: Rezerva kojom natpis ulazi PRE kraja tišine po VAD-u. Kašnjenje natpisa za
+#: govorom se oseti odmah (reč se čuje pre nego što se vidi), rani ulazak
+#: retko; ako je VAD tihi početak reči proglasio tišinom, rezerva ga pokrije.
+#: Krug 25: 0 / 0,08 / 0,15 uklanjaju isto natpisa sa pauzom (`tv` 29, `web`
+#: 42 / 41 / 41 — dnevnik), pa je uzeta najveća. Izbor po slušanju je otvoren (tri SRT-a za preslušavanje).
+SNAP_LEAD = 0.15
 
 #: Tišina „otvara" natpis ako počinje najviše ovoliko posle njegovog početka
 #: (i simetrično za kraj) — reč pre tišine ume da ima par desetinki zvuka.
@@ -934,7 +988,7 @@ class SnapReport:
 
 def snap_to_silences(
     cues: list[Cue], silences: list[tuple[float, float]], profile: Profile,
-    *, min_blank: float, min_silence: float = SNAP_SILENCE_MIN,
+    *, min_blank: float, min_silence: float = SNAP_SILENCE_MIN, lead: float | None = None,
 ) -> SnapReport:
     """Pomeri ivice natpisa na ivice tišine (posle `apply_timing`).
 
@@ -944,6 +998,7 @@ def snap_to_silences(
     može da nastane: početak ide samo napred, kraj samo nazad.
     """
     rep = SnapReport()
+    lead = SNAP_LEAD if lead is None else lead
     chars = [sum(len(l) for l in c.lines) for c in cues]
 
     def why_not(k: int, s: float, e: float, edge: str) -> str | None:
@@ -967,12 +1022,13 @@ def snap_to_silences(
             # tišina otvara natpis: počinje pre (ili tik posle) početka, traje
             # bar prag u natpisu, a posle nje u natpisu ima govora
             if a <= c.s + SNAP_EDGE_SLACK and b - c.s >= min_silence and b < c.e:
-                reason = why_not(k, round(b, 3), c.e, "s")
+                new_s = round(max(c.s, b - lead), 3)  # rezerva pred govorom
+                reason = why_not(k, new_s, c.e, "s")
                 if reason:
                     rep.rejected[reason] += 1
                 else:
-                    rep.starts.append((k, round(b - c.s, 3)))
-                    c.s = round(b, 3)
+                    rep.starts.append((k, round(new_s - c.s, 3)))
+                    c.s = new_s
             # tišina zatvara natpis
             elif b >= c.e - SNAP_EDGE_SLACK and c.e - a >= min_silence and a > c.s:
                 reason = why_not(k, c.s, round(a, 3), "e")

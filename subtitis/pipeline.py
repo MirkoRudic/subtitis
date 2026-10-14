@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import config as cfg
+from . import made_with
 from . import hallucination as halluc_mod
 from . import repeats
 from . import translit
@@ -168,7 +169,8 @@ def run_transcribe(
     if not auto_language:
         sent_path = guard_human_edits(language)
 
-    job = Job(job_id=jid, source_file=str(src.resolve()), language=language, status="created")
+    job = Job(job_id=jid, source_file=str(src.resolve()), language=language, status="created",
+              made_with=made_with())
     cfg.save_job(job)
     cfg.log(jid, f"ulaz: {src}  model: {model}  device: {device}/{compute_type}")
 
@@ -627,7 +629,7 @@ def run_import_srt(
 
     job = Job(
         job_id=jid, source_file=str(src.resolve()), language=language,
-        status="created", duration=duration,
+        status="created", duration=duration, made_with=made_with(),
     )
     cfg.save_job(job)
     cfg.log(jid, f"ulaz: {src} (SRT, {encoding}), jezik {language}")
@@ -1283,7 +1285,7 @@ def run_build(
         on_log(m)
 
     silences = None
-    if not is_translation and linebreak.pauses_enabled():
+    if not is_translation and linebreak.pauses_enabled(prof):
         from . import pauses as pauses_mod
 
         pf = pauses_mod.ensure(job_id, logger)
@@ -1299,7 +1301,7 @@ def run_build(
             glossary_terms=cfg.glossary_terms(cfg.job_glossary(job_id), sf.language),
             silences=silences,
         )
-        if linebreak.pauses_enabled() and not is_translation:
+        if linebreak.pauses_enabled(prof) and not is_translation:
             det["pauses"] = silences is not None
         if linebreak.SNAP_MIN_BLANK is not None and not is_translation:
             det["silence_timing"] = _snap_to_silences(job_id, cues, prof, logger)

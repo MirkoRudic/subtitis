@@ -148,10 +148,40 @@ def test_detect_belezi_vad_i_parametre(monkeypatch, tmp_path):
 # ==========================================================================
 
 
-def test_podrazumevano_iskljuceno():
-    assert not lb.pauses_enabled()
+def test_jednoredni_podrazumevano_bez_pauza():
+    """Krug 25: paket pauze je samo za dvoredni prelom."""
+    assert not lb.pauses_enabled(JEDAN_RED)
     ws = make_words(REC)
     assert lines(ws, tisina_posle(ws, 4)) == lines(ws)
+
+
+@pytest.mark.parametrize("ime", ["web", "digital"])
+def test_paket_za_dvoredni_ne_curi_u_web_i_digital(ime):
+    """`web` i `digital` se čitaju 1 : 3 uz pauze — paket ne sme da ih dirne:
+    ni pauza, ni filter, ni kazna za zamenicu. Pravi profili sa diska."""
+    from subtitis import config as cfg
+
+    prof = cfg.load_profile(ime)
+    assert prof.max_lines == 1
+    assert not lb.pauses_enabled(prof)
+    assert lb.pause_params(prof)["PAUSE_AT_FUNCTION_WORD"] == "keep"
+    assert lb.pause_params(prof)["PENALTY_SPLIT_PRONOUN"] == 0
+    for tekst in (REC, VEZNIK, "Mi nikome nećemo davati podršku pre izbora, a posle ćemo videti."):
+        ws = make_words(tekst)
+        for k in range(len(ws) - 1):
+            sil = tisina_posle(ws, k, 0.8)
+            assert lines(ws, sil, prof) == lines(ws, None, prof), (ime, tekst, k)
+
+
+def test_dvoredni_dobija_paket():
+    from subtitis import config as cfg
+
+    tv = cfg.load_profile("tv")
+    assert tv.max_lines == 2 and lb.pauses_enabled(tv)
+    pp = lb.pause_params(tv)
+    assert pp == {**lb.pause_params(), **lb.PAUSE_MULTILINE}
+    assert (pp["PAUSE_MIN"], pp["PENALTY_PAUSE_IN_CUE"], pp["PAUSE_BREAK_DISCOUNT"],
+            pp["PAUSE_AT_FUNCTION_WORD"], pp["PENALTY_SPLIT_PRONOUN"]) == (0.12, 100, 50, "discard", 25)
 
 
 def test_popust_vuce_rez_na_pauzu(monkeypatch):
@@ -235,7 +265,7 @@ def test_iskljuceno_prelamanje_ne_cita_zvuk(asr_posao, monkeypatch, tmp_path):
     from subtitis import pipeline
 
     monkeypatch.setattr(pauses, "detect", lambda wav: pytest.fail("isključeno ne čita zvuk"))
-    pipeline.run_build("a", out=tmp_path / "a.srt")
+    pipeline.run_build("a", profile="web", out=tmp_path / "a.srt")
     assert not pauses.path("a").exists()
 
 
@@ -343,7 +373,7 @@ def _cues(*spans, text="Kratak natpis."):
 def test_pocetak_ide_na_kraj_tisine_kraj_na_pocetak():
     cs = _cues((0.0, 2.0), (2.083, 5.0), (5.083, 8.0))
     sil = [(2.0, 2.6), (7.3, 8.2)]  # otvara drugi natpis; zatvara treći
-    rep = lb.snap_to_silences(cs, sil, TV, min_blank=0.4)
+    rep = lb.snap_to_silences(cs, sil, TV, min_blank=0.4, lead=0)
     assert (cs[1].s, cs[1].e) == (2.6, 5.0)
     assert (cs[2].s, cs[2].e) == (5.083, 7.3)
     assert rep.starts == [(1, 0.517)] and rep.ends == [(2, 0.7)]
@@ -372,8 +402,25 @@ def test_ogranicenja_odbijaju_celo_pomeranje(cue, sil, razlog):
 def test_praznina_gleda_samo_ivicu_koja_se_pomera():
     """Razmak od 0,083 posle natpisa nije napravilo pomeranje početka."""
     cs = _cues((0.0, 1.0), (1.083, 4.0), (4.083, 6.0))
-    rep = lb.snap_to_silences(cs, [(1.0, 1.4)], TV, min_blank=0.4)
+    rep = lb.snap_to_silences(cs, [(1.0, 1.4)], TV, min_blank=0.4, lead=0)
     assert cs[1].s == 1.4 and rep.starts  # nova praznina 0,4 — dovoljno
     cs = _cues((0.0, 1.0), (1.083, 4.0))
     rep = lb.snap_to_silences(cs, [(1.0, 1.4)], TV, min_blank=0.5)
     assert cs[1].s == 1.083 and rep.rejected["praznina"] == 1
+
+
+def test_rezerva_pusta_natpis_pre_kraja_tisine():
+    """Krug 25: kašnjenje za govorom je gore od ranog ulaska."""
+    assert lb.SNAP_LEAD == 0.15 and lb.SNAP_MIN_BLANK == 0.40
+    cs = _cues((0.0, 2.0), (2.083, 5.0))
+    lb.snap_to_silences(cs, [(2.0, 2.8)], TV, min_blank=0.4)  # podrazumevana rezerva
+    assert cs[1].s == 2.65
+    cs = _cues((0.0, 2.0), (2.083, 5.0))
+    lb.snap_to_silences(cs, [(2.0, 2.3)], TV, min_blank=0.0, lead=0.5)
+    assert cs[1].s == 2.083, "rezerva ne vraća početak pre starog"
+
+
+def test_rezerva_ulazi_u_proveru_praznine():
+    cs = _cues((0.0, 2.0), (2.083, 5.0))
+    rep = lb.snap_to_silences(cs, [(2.0, 2.5)], TV, min_blank=0.4, lead=0.15)
+    assert cs[1].s == 2.083 and rep.rejected["praznina"] == 1  # 2,35 − 2,0 < 0,4

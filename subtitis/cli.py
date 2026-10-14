@@ -25,6 +25,24 @@ app = typer.Typer(
 )
 
 
+def _version(value: bool) -> None:
+    if value:
+        from . import version_string
+
+        typer.echo(version_string())
+        raise typer.Exit()
+
+
+@app.callback()
+def _main(
+    version: bool = typer.Option(
+        False, "--version", callback=_version, is_eager=True,
+        help="Verzija, krug i commit koda.",
+    ),
+) -> None:
+    """Subtitis — SRT titlovi iz audija."""
+
+
 def _fail(msg: str) -> None:
     typer.secho(f"\nGREŠKA: {msg}\n", fg=typer.colors.RED, err=True)
     raise typer.Exit(code=1)

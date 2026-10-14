@@ -213,3 +213,5 @@ class Job(BaseModel):
     created_at: str = Field(default_factory=_now)
     updated_at: str = Field(default_factory=_now)
     history: list[PhaseRecord] = Field(default_factory=list)
+    #: Verzija, krug i commit koda koji je napravio posao (krug 25).
+    made_with: dict[str, Any] = Field(default_factory=dict)

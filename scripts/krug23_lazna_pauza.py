@@ -115,6 +115,7 @@ def meri(data, prof, thr, use_pauses):
 
 
 def postavi(thr, w, d, x, nacin="keep"):
+    lb.PAUSE_MULTILINE = None  # krug 25: paket za dvoredni bi pregazio mrežu
     lb.PAUSE_MIN, lb.PENALTY_PAUSE_IN_CUE, lb.PAUSE_BREAK_DISCOUNT, lb.PENALTY_BREAK_WITHOUT_PAUSE = thr, w, d, x
     lb.PAUSE_AT_FUNCTION_WORD = nacin
 

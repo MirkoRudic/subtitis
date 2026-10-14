@@ -846,8 +846,10 @@ templates.env.filters["dec"] = dec
 templates.env.filters["plural"] = lambda n, one, few, many: plural(n, one, few, many)
 
 from .. import __version__ as VERSION  # noqa: E402 — potpis u podnožju (base.html)
+from .. import version_string  # noqa: E402
 
 templates.env.globals["version"] = VERSION
+templates.env.globals["signature"] = version_string()
 
 
 # ==========================================================================

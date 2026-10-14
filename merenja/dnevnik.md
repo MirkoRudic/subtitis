@@ -842,3 +842,85 @@ težine pauze.
 
 Varijanta „pauza se premešta ispred veznika" je izbačena iz koda: čita se
 isto kao odbacivanje (9 : 5), a ostavlja 1 kraj natpisa na vezniku prema 0.
+
+## Obrazac: mera koja po konstrukciji raste kad mehanizam uspeva nije cena (2026-10-14)
+
+Krug 24: kad se početak natpisa pomeri na kraj tišine, prazan ekran poraste
+tačno onoliko koliko teksta nad tišinom nestane — isti broj s druge strane,
+pa bi mehanizam po pravilu „mrtvo vreme ne sme da poraste" padao uvek.
+Obrnut slučaj obrasca iz kruga 23 (mera koju mehanizam ne dira). Pre nego
+što mera postane uslov, proveri se da li je nezavisna od mehanizma.
+
+## Pravilo brojanja čitanja (od kruga 25)
+
+**Ponovljeni snimak istog govora broji se jednom** — isti tekst
+transkribovan dvaput nije dva nezavisna dokaza, ni za popravku ni za
+pogoršanje. Daje se jedan merodavan broj; broj sa ponovljenima, ako se uopšte
+navodi, ide u napomenu. Ponovljeni u ovom skupu: dva posla istog snimka
+Video-1 draft 2, i Video-13 sa drugim snimkom istog govora.
+
+Prevod ranijih brojeva: krug 24, filter + zamenica u `tv`: **5 : 1 : 3**
+(sa ponovljenima bilo 5 : 2 : 5). Procena „8 : 3 na punom skupu kruga 23"
+je već bila BEZ ponovljenih (8 : 4 : 3 iz kruga 23, minus popravljena
+zamenica) — novo pravilo je ne menja, i ostaje ispod 3 : 1. Razlika 5 : 1
+prema 8 : 3 nije u brojanju nego u skupu: dva pogoršanja tipa subjekat /
+predikat su u poslovima koji su izgubili zvuk pre nego što je `pauses.json`
+napravljen. Paket je uveden po izmerenom broju (5 : 1), odlukom.
+
+## Veličina mernog skupa po krugu (2026-10-14)
+
+Brojevi različitih krugova se porede samo na istom skupu.
+
+| krug | poslova | od toga sa tišinama | napomena |
+|---|---|---|---|
+| 19 | 15 | 13 (iz zvuka) | 2 već bez zvuka |
+| 20, 21 | 15 | — | tišine se ne koriste |
+| 22, 23 | 11 | 11 (iz zvuka) | 8 poslova izgubilo zvuk po roku |
+| 24 | 8 | 8 (iz zvuka) | još 3 izgubila zvuk |
+| 25 | 8 | 8 (`pauses.json`) | `pauses.json` napravljen za svih 7 koji su još imali zvuk |
+
+Od kruga 25 merenje čita samo `pauses.json` (bez zvuka), a svaki nov posao
+ga dobija pri prepoznavanju — skup odsad raste. 11 starijih poslova ga
+nikad neće imati.
+
+## 2026-10-14 — Krug 25: rezerva pred govorom, spoj preloma i vremena, paket za `tv`
+
+`scripts/krug25.py`, 8 poslova sa `pauses.json`. Uključeno: vreme po tišini
+(`SNAP_MIN_BLANK` 0,40, `SNAP_LEAD` 0,15) i paket pauze za dvoredni prelom
+(`PAUSE_MULTILINE`: `PAUSE_MIN` 0,12, `PENALTY_PAUSE_IN_CUE` 100 do najviše
+50, `PAUSE_BREAK_DISCOUNT` 50, `PAUSE_AT_FUNCTION_WORD` "discard",
+`PENALTY_SPLIT_PRONOUN` 25). `web` i `digital` netaknuti (test).
+
+**Udaljenost tišine od granice reči** (65 tišina ≥ 0,30 s unutar rečenice):
+0 (dodiruje granicu) 23 %, do 0,10 s 48 %, do 0,20 s 18 %, do 0,30 s 5 %,
+preko 6 %. Rez na granici plus vreme ivice može da skine 69 % (rep
+prethodne reči 38 %, čelo sledeće 31 %); 31 % je duboko u reči.
+
+**Rezerva** (natpisa sa pauzom, posle vremena):
+
+| | bez vremena | 0 | 0,08 | 0,15 |
+|---|---|---|---|---|
+| `tv` (sa paketom) | 41 / 78 | 29 (37,2 %) | 29 | 29 |
+| `web` | 53 / 139 | 42 (30,2 %) | 41 | 41 (29,5 %) |
+
+0,15 ne kvari ništa (u `web` je i jedan bolji: manje odbijenih zbog CPS-a,
+jer pomeraj ostaje kraći) — uzeta je najveća. Izbor po slušanju je otvoren:
+tri SRT-a istog posla, `..._lead000/008/015.srt`.
+
+**Stanje `tv` posle paketa** (prema prelomu bez pauza, bez vremena):
+
+| | cue-ova | sa pauzom | početak / kraj / sredina | preko CPS | prekratkih |
+|---|---|---|---|---|---|
+| prelom bez pauza | 72 | 41 (56,9 %) | 9 / 0 / 32 | 1 | 1 |
+| paket | 78 | 41 (52,6 %) | 15 / 2 / 24 | 1 | 1 |
+| paket + vreme (0,15) | 78 | **29 (37,2 %)** | 1 / 0 / 28 | 1 | 1 |
+
+To je spoj: paket premešta rez na granicu kod tišine (sredina 32 -> 24,
+početak 9 -> 15), vreme ga skida (početak 15 -> 1). Cena: 6 natpisa više,
+CPS i prekratki isti.
+
+**Spoj u `web`** (popust + filter + zamenica, pa vreme): prag 0,20 / 0,30 ×
+popust 25 / 50 / 100 × kazna 0 / 50 daje najviše 41 -> 39, bez cene, 2–4
+promenjene rečenice; čitanje (ponovljeni jednom) 1 : 1 : 1. Tek kazna 1000
+uz kapu 300 spušta na 31, po ceni od natpisa ispod 14 znakova 6 -> 18 i
+CPS +2. Ne uvodi se — u jednom redu rez nema kuda, kao u krugovima 19–23.
