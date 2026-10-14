@@ -56,7 +56,10 @@ code { background: var(--surface-2); padding: 0 .3em; border-radius: 3px; font-s
 .muted { color: var(--muted); }
 .faint { color: var(--faint); }
 .small { font-size: .85rem; }
-.err { color: var(--err); white-space: pre-wrap; }
+/* `.err` je i modifikator (`.flagbar.err`, `.pill.err`): samo boja, ništa
+   što se nasleđuje u raspored — `pre-wrap` je davao praznine u traci (krug 27). */
+.err { color: var(--err); }
+pre.err { white-space: pre-wrap; }
 .ok { color: var(--accent); }
 
 /* ---------- zaglavlje: zakucano na svakoj strani ---------- */
@@ -207,7 +210,10 @@ button.link.danger:hover { color: var(--err); }
 #progress-label { margin: -10px 0 14px; }
 
 /* trake upozorenja */
-.flagbar { border-radius: 8px; padding: 11px 14px; margin-bottom: 12px; font-size: .86rem; display: flex; gap: 11px; align-items: flex-start; color: var(--muted); }
+/* Krug 27: traka je jedan red — ikonica, šta i koliko, radnja, detalji (why-ic). */
+.flagbar { border-radius: 8px; padding: 8px 14px; margin-bottom: 6px; font-size: .86rem; display: flex; gap: 11px; align-items: center; color: var(--muted); }
+.flagbar .flagtxt { flex: 1 1 auto; min-width: 0; }
+.flagbar > .why-ic { margin-left: 0; }
 .flagbar .ic { flex: none; font-weight: 700; font-family: var(--font-mono); }
 .flagbar.err { background: var(--err-bg); border-left: 2px solid var(--err); }
 .flagbar.err .ic, .flagbar.err b { color: var(--err); }
@@ -220,7 +226,7 @@ button.link.danger:hover { color: var(--err); }
 .flagbar p { margin: 0 0 4px; }
 .flagbar ul { margin: 4px 0; padding-left: 1.1rem; }
 .flagbar pre { margin: 6px 0 0; font-size: .78rem; max-height: 200px; overflow: auto; }
-.flagact { display: block; margin-top: 10px; }
+.flagact { flex: none; white-space: nowrap; }
 .flagact form { display: inline; margin: 0; }
 
 /* editor */
@@ -502,6 +508,8 @@ details.terms-toggle { margin-top: 10px; }
   box-shadow: 0 10px 28px rgba(0,0,0,.5);
 }
 .pop p { margin: .3rem 0; }
+.pop ul { margin: .3rem 0; padding-left: 1.1rem; }
+.pop pre { font-size: .74rem; max-height: 220px; overflow: auto; margin: .3rem 0; }
 .pop table { border-collapse: collapse; margin: .4rem 0; font-size: .78rem; width: auto; }
 .pop th, .pop td { border-bottom: 1px solid var(--line); padding: .15rem .45rem; text-align: left; vertical-align: top; }
 .pop td.n { text-align: right; font-variant-numeric: tabular-nums; }

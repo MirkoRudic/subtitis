@@ -27,98 +27,104 @@
 <div class="progress"><div id="bar" style="width:0%"></div></div>
 <div class="note" id="progress-label"></div>
 
-{# ---- 2. Trake upozorenja, pre svega ostalog ---- #}
+{# ---- 2. Trake upozorenja, pre svega ostalog ----
+   Krug 27: svaka traka je JEDAN RED — ikonica i boja (težina), šta i
+   koliko, radnja ako je ima, pa ikonica za detalje. Spisak, „zašto" i
+   uputstvo su u prozorčiću. Brojka se ne krije: da nešto nije u redu i
+   koliko toga vidi se bez klika (krug 23 — alat ne sme da ćuti). #}
 {% if job.status == 'error' %}
   <div class="flagbar err">
     <span class="ic">!</span>
-    <span><b>Projekat je pao.</b> Ono što je zavisilo od ovog koraka nije
-      pokrenuto — preskočeno je, nije „gotovo".
+    <span class="flagtxt"><b>Projekat je pao</b>{% if job.error %}: {{ job.error.splitlines()[0]|truncate(90) }}{% endif %}{% if bad_tasks %} · {{ bad_tasks|length }} {{ bad_tasks|length|plural('zadatak', 'zadatka', 'zadataka') }}{% endif %}</span>
+    {% call why(za="Projekat je pao") %}
+      <p>Ono što je zavisilo od ovog koraka nije pokrenuto — preskočeno je, nije „gotovo".</p>
       {% if job.error %}<pre class="err">{{ job.error }}</pre>{% endif %}
-      {% if bad_tasks %}
-        <ul class="small">
-          {% for t in bad_tasks %}
-            <li><code>{{ t.kind }}</code> — {{ t.state }}{% if t.error %}: {{ t.error|truncate(200) }}{% endif %}</li>
-          {% endfor %}
-        </ul>
-      {% endif %}
-    </span>
+      {% if bad_tasks %}<ul>{% for t in bad_tasks %}<li><code>{{ t.kind }}</code> — {{ t.state }}{% if t.error %}: {{ t.error|truncate(200) }}{% endif %}</li>{% endfor %}</ul>{% endif %}
+    {% endcall %}
   </div>
 {% elif job.error %}
-  <div class="flagbar err"><span class="ic">!</span><pre class="err">{{ job.error }}</pre></div>
+  <div class="flagbar err">
+    <span class="ic">!</span>
+    <span class="flagtxt"><b>Greška:</b> {{ job.error.splitlines()[0]|truncate(90) }}</span>
+    {% call why(za="Greška") %}<pre class="err">{{ job.error }}</pre>{% endcall %}
+  </div>
 {% endif %}
 
 {% for u in untranslated %}
   <div class="flagbar err">
     <span class="ic">!</span>
-    <span>
+    <span class="flagtxt">{% for g in u.groups %}<b>{{ u.lang }}: {{ g.head }}</b>{% if g.cue_count %} ({{ g.cue_count }} {{ g.cue_count|plural('cue', 'cue-a', 'cue-ova') }}){% endif %}{% if not loop.last %} · {% endif %}{% endfor %} — obojene u editoru</span>
+    <span class="flagact"><a href="/jobs/{{ job.id }}?lang={{ u.lang }}">otvori {{ u.lang }}</a></span>
+    {% call why(za=u.lang ~ ": rečenice koje liče na original") %}
       {% for g in u.groups %}
-        <p><b>{{ u.lang }}: {{ g.head }}{% if g.cues %} — {{ g.cues }}{% endif %}</b> — {{ g.why }}.</p>
-        <ul class="small">
-          {% for i in g.sentences %}
-            <li>rečenica {{ i.sentence }}{% if i.cues %} — cue {{ i.cues|join(', ') }}{% endif %}
-              {% if i.reason != 'translation_failed' %}<span class="muted">({{ i.reason }})</span>{% endif %}</li>
-          {% endfor %}
-        </ul>
+        <p><strong>{{ g.head }}{% if g.cues %} — {{ g.cues }}{% endif %}</strong> — {{ g.why }}.</p>
+        <ul>{% for i in g.sentences %}<li>rečenica {{ i.sentence }}{% if i.cues %} — cue {{ i.cues|join(', ') }}{% endif %}{% if i.reason != 'translation_failed' %} <span class="muted">({{ i.reason }})</span>{% endif %}</li>{% endfor %}</ul>
       {% endfor %}
-      Obojene su crveno u editoru
-      (<a href="/jobs/{{ job.id }}?lang={{ u.lang }}">otvori {{ u.lang }}</a>);
-      ručna ispravka skida oznaku.
-    </span>
+      <p>Obojene su crveno u editoru; ručna ispravka skida oznaku.</p>
+    {% endcall %}
   </div>
 {% endfor %}
 
 {% if invented %}
-  {#- Cela rečenica, ne samo uhvaćene reči: pravilo hvata reči nultog
-      trajanja, a izmišljena rečenica ume da ima i razvučene (krug 23). Ista
-      brojka stoji u „Za preuzimanje". -#}
+  {#- Cela rečenica, ne samo uhvaćene reči (krug 23). Ista brojka stoji u
+      „Za preuzimanje". -#}
   {% set n = invented|length %}
+  {% set w = invented|sum(attribute='words') %}
   <div class="flagbar err">
     <span class="ic">!</span>
-    <span><b>{{ n }} {{ n|plural('rečenica', 'rečenice', 'rečenica') }} bez zvuka iza sebe — gotovo sigurno {{ n|plural('izmišljena', 'izmišljene', 'izmišljenih') }}, {{ n|plural('cela', 'cele', 'cele') }}.</b>
-      {% for v in invented %}Rečenica {{ v.sentence }} u {{ v.at }}: {{ v.words }} {{ v.words|plural('reč', 'reči', 'reči') }}{% if v.caught < v.words %}, od toga {{ v.caught }} bez trajanja — ostale imaju razvučena vremena pa ih pravilo ne hvata, ali su deo iste rečenice{% endif %}{% if not loop.last %}; {% endif %}{% endfor %}.
-      {% if halluc_items %}Uhvaćene reči: {% for h in halluc_items %}<code>{{ h.text }}</code> u {{ h.at }}{% if not loop.last %}; {% endif %}{% endfor %}.{% endif %}
-      Precrtane su u editoru; izbaci rečenicu pa će oznaka nestati.</span>
+    <span class="flagtxt"><b>{{ n }} {{ n|plural('rečenica', 'rečenice', 'rečenica') }} bez zvuka iza sebe ({{ w }} {{ w|plural('reč', 'reči', 'reči') }})</b> — gotovo sigurno {{ n|plural('izmišljena', 'izmišljene', 'izmišljenih') }}, precrtano u editoru</span>
+    {% call why(za="Rečenice bez zvuka iza sebe") %}
+      <p>Izmišljena je cela rečenica, ne samo uhvaćene reči: pravilo hvata reči
+      bez trajanja, a ostale imaju razvučena vremena.</p>
+      <ul>{% for v in invented %}<li>rečenica {{ v.sentence }} u {{ v.at }}: {{ v.words }} {{ v.words|plural('reč', 'reči', 'reči') }}{% if v.caught < v.words %}, od toga {{ v.caught }} bez trajanja{% endif %}</li>{% endfor %}</ul>
+      {% if halluc_items %}<p>Uhvaćene reči: {% for h in halluc_items %}<code>{{ h.text }}</code> u {{ h.at }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+      <p>Izbaci rečenicu u editoru pa će oznaka nestati.</p>
+    {% endcall %}
   </div>
 {% endif %}
 
 {% if summary and summary.silence_pct and not srt_job %}
   <div class="flagbar warn">
     <span class="ic">~</span>
-    <span><b>{{ summary.silence_pct|dec }}% snimka nije govor</b> — muzika, džingl, špica ili tišina.
-      Model je slušao i te delove, pa je tu mogao da izmisli tekst.
-      Filter izbacuje delove bez govora pre prepoznavanja; na tihom govoru ume da pojede poneku reč.
+    <span class="flagtxt"><b>{{ summary.silence_pct|dec }}% snimka nije govor</b> — tu je model mogao da izmisli tekst</span>
+    {% if not (sf and sf.edited_by_human) %}
       <span class="flagact">
-        {% if not (sf and sf.edited_by_human) %}
-          <form method="post" action="/jobs/{{ job.id }}/retranscribe"
-                data-confirm-title="Ponoviti prepoznavanje sa filterom tišine?"
-                data-confirm-body="Trenutni prepis se zamenjuje novim."
-                data-confirm-ok="Ponovi sa filterom">
-            <input type="hidden" name="vad_preset" value="normalno">
-            <button type="submit" class="btn sm ghost" {% if pending %}disabled{% endif %}>Ponovi sa filterom</button>
-          </form>
-        {% endif %}
+        <form method="post" action="/jobs/{{ job.id }}/retranscribe"
+              data-confirm-title="Ponoviti prepoznavanje sa filterom tišine?"
+              data-confirm-body="Trenutni prepis se zamenjuje novim."
+              data-confirm-ok="Ponovi sa filterom">
+          <input type="hidden" name="vad_preset" value="normalno">
+          <button type="submit" class="btn sm ghost" {% if pending %}disabled{% endif %}>Ponovi sa filterom</button>
+        </form>
       </span>
-    </span>
+    {% endif %}
+    {% call why(za="Snimak koji nije govor") %}
+      <p>Muzika, džingl, špica ili tišina. Model je slušao i te delove, pa je tu
+      mogao da izmisli tekst.</p>
+      <p>Filter izbacuje delove bez govora pre prepoznavanja; na tihom govoru ume
+      da pojede poneku reč.</p>
+    {% endcall %}
   </div>
 {% endif %}
 
 {% if task_summary.get('skipped') %}
-  <div class="flagbar err"><span class="ic">!</span><span>preskočenih zadataka: {{ task_summary['skipped'] }}</span></div>
+  <div class="flagbar err"><span class="ic">!</span><span class="flagtxt"><b>preskočenih zadataka: {{ task_summary['skipped'] }}</b></span></div>
 {% endif %}
 
 {% if srt_job %}
   <div class="flagbar info">
     <span class="ic">i</span>
-    <span><span class="field-label"><b>Vremena iz tvog fajla ostaju netaknuta.</b>{% call why("Broj cue-ova i sva vremena u izlazu identični su ulazu — menja se samo tekst. Provera se izvodi pre upisa: ako se tajming razlikuje, fajl se ne zapisuje.", za="Prevod gotovog SRT-a") %}
-          <p><strong>Ograničenja ovog režima.</strong> U ovom režimu nema zvuka, pa nema ni preslušavanja ni bojenja po sigurnosti.</p>
-          <p><strong>Kurziv preko dela rečenice se gubi</strong> i takav cue ti se
-          prijavi. Cue koji je ceo u kurzivu ostaje u kurzivu.</p>
-          <p><strong>Nedosledna interpunkcija u ulazu pravi greške.</strong> Cue
-          <code>Ja sam Bojan</code> bez tačke, praćen cue-om <code>Imam dva psa</code>,
-          daje rečenicu u kojoj model čita <code>Imam</code> kao prezime:
-          <code>Je m'appelle Bojan Imam</code>. Ako ulaz nema tačke na krajevima
-          rečenica, dodaj ih pre prevoda.</p>{% endcall %}</span>
-    </span>
+    <span class="flagtxt"><b>Vremena iz tvog fajla ostaju netaknuta</b> — menja se samo tekst</span>
+    {% call why("Broj cue-ova i sva vremena u izlazu identični su ulazu — menja se samo tekst. Provera se izvodi pre upisa: ako se tajming razlikuje, fajl se ne zapisuje.", za="Prevod gotovog SRT-a") %}
+      <p><strong>Ograničenja ovog režima.</strong> U ovom režimu nema zvuka, pa nema ni preslušavanja ni bojenja po sigurnosti.</p>
+      <p><strong>Kurziv preko dela rečenice se gubi</strong> i takav cue ti se
+      prijavi. Cue koji je ceo u kurzivu ostaje u kurzivu.</p>
+      <p><strong>Nedosledna interpunkcija u ulazu pravi greške.</strong> Cue
+      <code>Ja sam Bojan</code> bez tačke, praćen cue-om <code>Imam dva psa</code>,
+      daje rečenicu u kojoj model čita <code>Imam</code> kao prezime:
+      <code>Je m'appelle Bojan Imam</code>. Ako ulaz nema tačke na krajevima
+      rečenica, dodaj ih pre prevoda.</p>
+    {% endcall %}
   </div>
 {% endif %}
 

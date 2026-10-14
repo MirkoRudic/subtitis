@@ -551,7 +551,7 @@ def test_editor_podnosi_posao_bez_zvuka(web):
     r = client.get(f"/jobs/{job_id}")
     assert r.status_code == 200
     assert 'class="play"' not in r.text
-    assert "Vremena iz tvog fajla ostaju netaknuta." in r.text
+    assert "<b>Vremena iz tvog fajla ostaju netaknuta</b>" in r.text
     assert "U ovom režimu nema zvuka" in r.text
     assert 'class="low"' not in r.text
     assert "Juče sam otišao u grad sa svojim bratom" in r.text
@@ -741,7 +741,10 @@ def test_neprevedena_recenica_se_prijavljuje_glasno(web, monkeypatch):
 
     # stranica: blok na vrhu i na drugom jeziku, crveni red u editoru
     page = client.get(f"/jobs/{job_id}").text
-    assert "fr: 1 rečenica neprevedena — 2 cue-a (1–2)" in page
+    # krug 27: u redu trake broj i jezik, bez klika; spisak u prozorčiću
+    red = page.split('<span class="flagtxt">')[1].split("</span>")[0]
+    assert "<b>fr: 1 rečenica neprevedena</b> (2 cue-a)" in red
+    assert "1 rečenica neprevedena — 2 cue-a (1–2)" in page.split("<template>")[1]
     assert "rečenica 1 — cue 1, 2" in page
     page = client.get(f"/jobs/{job_id}?lang=fr").text
     assert "flag-failed" in page

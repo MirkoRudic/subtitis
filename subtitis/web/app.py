@@ -373,6 +373,7 @@ def untranslated(job_id: str, langs: list[str]) -> list[dict[str, Any]]:
                         f"{u.plural(n, *forms)}",
                 "cues": (f"{len(cues)} {u.plural(len(cues), 'cue', 'cue-a', 'cue-ova')} "
                          f"({u.cue_ranges(cues)})") if cues else "",
+                "cue_count": len(cues),
                 "why": why,
                 "sentences": [i.as_dict() for i in items],
             })

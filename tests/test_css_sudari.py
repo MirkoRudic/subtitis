@@ -63,6 +63,52 @@ def collisions() -> list[tuple[str, list[str]]]:
     return found
 
 
+_PAIR = re.compile(r"^\.([A-Za-z_][\w-]*)\.([A-Za-z_][\w-]*)$")
+
+
+def _props(body: str) -> set[str]:
+    return {d.split(":", 1)[0].strip() for d in body.split(";") if ":" in d}
+
+
+def modifier_leaks(css: str) -> dict[str, set[str]]:
+    """Krug 27: modifikator čije ime ima i SAMOSTALNO pravilo prenosi na
+    komponentu sve što to pravilo postavlja, a ni komponenta ni par ne
+    postavljaju. `.err { white-space: pre-wrap }` je tako ušao u
+    `.flagbar.err` i svaki prazan red šablona postao vidljiv (42 px iznad
+    svake stavke spiska). Ključ je `.komponenta.modifikator`."""
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    single: dict[str, set[str]] = {}
+    pairs: dict[tuple[str, str], set[str]] = {}
+    for sel, body in _RULE.findall(css):
+        for s in sel.split(","):
+            s = s.strip()
+            if m := _SIMPLE.match(s):
+                single.setdefault(m.group(1), set()).update(_props(body))
+            elif m := _PAIR.match(s):
+                pairs.setdefault((m.group(1), m.group(2)), set()).update(_props(body))
+    out = {}
+    for (a, b), own in pairs.items():
+        if b in single:
+            leaked = single[b] - single.get(a, set()) - own
+            if leaked:
+                out[f".{a}.{b}"] = leaked
+    return out
+
+
+def test_modifikator_ne_prenosi_tudja_svojstva():
+    leaks = modifier_leaks(CSS.read_text(encoding="utf-8"))
+    assert not leaks, (
+        f"modifikator ima i samostalno pravilo koje se preliva na komponentu: {leaks}. "
+        "Svojstvo premesti na element kome pripada (npr. `pre.err`) ili daj drugo ime."
+    )
+
+
+def test_provera_vidi_curenje_iz_kruga_27():
+    css = (".err { color: red; white-space: pre-wrap; }\n.flagbar { display: flex; color: gray; }\n"
+           ".flagbar.err { background: pink; }\n.pill.ok { color: green; }")
+    assert modifier_leaks(css) == {".flagbar.err": {"white-space"}}
+
+
 def test_nijedan_element_ne_nosi_dve_komponente():
     sudari = collisions()
     assert not sudari, (

@@ -942,3 +942,24 @@ element sa dve takve je sudar. Na kodu pre popravke: 37 komponenti, tačno
 jedan sudar — ovaj. Klasa bez ijednog pravila u markupu je tri (`clean`,
 `take`, `worker-state`), sve namerne (stanje, JS kuka, sestrinska klasa);
 nijedna iz krugova 20–25.
+
+## 2026-10-14 — Krug 27: trake upozorenja kao jedan red; `.err` je curio u traku
+
+Svaka traka je jedan red: ikonica i boja (težina), šta i koliko, radnja ako
+je ima, ikonica za detalje (`why-ic`). Spisak, „zašto" i uputstvo su u
+prozorčiću. Broj se ne krije — da nešto nije u redu i koliko toga vidi se bez
+klika. Ukupna visina traka na poslu prevoda uvezenog SRT-a (crvena + cijan),
+Chrome 1280 × 900: **712 px -> 75 px** (crvena 669 -> 37, cijan 43 -> 37).
+
+Prazan prostor u spisku (42 px po stavci, `ul` 379 px za tri stavke) je isti
+obrazac kao `info` iz kruga 26, samo na drugom svojstvu: `.err { color;
+white-space: pre-wrap }` je samostalno pravilo za crveni tekst i za
+`<pre class="err">`, a `err` je i modifikator trake (`.flagbar.err`). Traka
+je nasledila `pre-wrap`, pa je svaki prelom reda i uvlačenje šablona između
+`<li>` postao vidljiv red. Provera iz kruga 26 to ne hvata — gleda samo
+`display` na elementu sa dve komponente; ovde je jedna komponenta i jedan
+modifikator, a svojstvo se nasleđuje. Proširenje (`modifier_leaks`): za
+svaki par `.a.b` čiji `b` ima i samostalno pravilo, svojstva tog pravila
+koja ni `.a` ni `.a.b` ne postavljaju cure u komponentu. Na kodu pre
+popravke: tačno jedno curenje, `.flagbar.err` <- `white-space`. Popravka:
+`pre-wrap` je samo na `pre.err`.

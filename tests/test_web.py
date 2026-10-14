@@ -1421,8 +1421,9 @@ def test_izmisljena_recenica_cela_u_traci_i_u_panelu_za_preuzimanje(web):
     (jdir / "out" / "x.sr-Latn.srt").write_text(srt, encoding="utf-8")
     page = client.get(f"/jobs/{jid}").text
     bar = page.split('class="flagbar err"')[1].split("</div>")[0]
-    assert "1 rečenica bez zvuka iza sebe" in bar and "cela" in bar
-    assert "3 reči, od toga 2 bez trajanja" in bar
+    red = bar.split('<span class="flagtxt">')[1].split("</span>")[0]
+    assert "1 rečenica bez zvuka iza sebe (3 reči)" in red, "brojka se vidi bez klika"
+    assert "rečenica 2 u 00:03,00: 3 reči, od toga 2 bez trajanja" in bar.split("<template>")[1]
     panel = page.split('id="downloads"')[1].split("</section>")[0]
     assert "1 rečenica bez zvuka iza sebe" in panel and "(3 reči)" in panel
     assert "2 izmišljena" in panel  # natpisi 2 i 3, natpis 1 je govor
@@ -1527,7 +1528,7 @@ def test_upozorenje_o_tisini(web, vad, share, shown):
     page = client.get(f"/jobs/{jid}").text
     # muzika izričito, ne samo tišina — džingl i špica su čest slučaj (krug 5)
     # tekst iz mokapa kruga 8; muzika i dalje izričito
-    assert ("muzika, džingl, špica ili tišina" in page) is shown
+    assert ("snimka nije govor</b>" in page) is shown
     if shown:
         assert "<b>30% snimka nije govor</b>" in page
         bar = page.split('class="flagbar warn"')[1].split("</div>")[0]
@@ -1705,8 +1706,8 @@ def test_traka_izmisljenih_reci_kaze_sta_i_kad(web):
     ))
     page = client.get(f"/jobs/{jid}").text
     bar = page.split('class="flagbar err"')[1].split("</div>")[0]
-    assert "1 rečenica bez zvuka iza sebe" in bar
-    assert "Rečenica 2 u 00:32,26: 2 reči." in bar  # sve uhvaćene — bez „od toga"
+    assert "1 rečenica bez zvuka iza sebe (2 reči)" in bar
+    assert "rečenica 2 u 00:32,26: 2 reči</li>" in bar  # sve uhvaćene — bez „od toga"
     assert "<code>OKC Divčibare</code> u 00:32,26" in bar
 
 
@@ -2460,3 +2461,35 @@ def test_staticki_fajlovi_nose_otisak_sadrzaja(web, monkeypatch, tmp_path):
     (static / "app.css").write_text("a{color:red}", encoding="utf-8")
     assert app_mod.static_url("app.css") != prvi
     assert app_mod.static_url("nema.css") == "/static/nema.css"
+
+
+def test_traka_je_jedan_red_spisak_je_u_prozorcicu(web):
+    """Krug 27: traka nosi ikonicu, šta i koliko, radnju i ikonicu za detalje.
+    Spisak, `pre` i pasusi su u <template> prozorčića — ne u samoj traci."""
+    import re
+
+    client, db, cfg = web
+    jid = make_job(cfg, db)
+    jdir = cfg.job_dir(jid)
+    cfg.write_model(jdir / "words.sr.json", WordsFile(
+        job_id=jid, source_file="x", duration=40.0, language="sr", asr=AsrMeta(model="test"),
+        words=[Word(i=0, s=0.0, e=0.5, w="Dobar", p=0.95),
+               Word(i=1, s=32.26, e=32.26, w="OKC", p=0.99),
+               Word(i=2, s=32.26, e=32.26, w="Divčibare", p=0.99)],
+    ))
+    cfg.write_model(jdir / "sentences.sr.json", SentencesFile(
+        job_id=jid, language="sr", derived_from="words.sr.json",
+        sentences=[Sentence(id=1, s=0.0, e=0.5, text="Dobar", words=(0, 0)),
+                   Sentence(id=2, s=32.26, e=32.26, text="OKC Divčibare", words=(1, 2))],
+    ))
+    db.update_job(jid, status="error", error="prvi red greške\ndrugi red\ntreći red")
+    page = client.get(f"/jobs/{jid}").text
+    bars = re.findall(r'<div class="flagbar [a-z]+">(.*?)\n  </div>', page, re.S)
+    assert len(bars) >= 2
+    for bar in bars:
+        red = re.sub(r"<template>.*?</template>", "", bar, flags=re.S)
+        assert not re.search(r"<(ul|li|p|pre)\b", red), red
+        assert '<span class="ic">' in red and 'class="flagtxt"' in red and 'class="why-ic"' in red
+    # greška u redu je samo prvi red; ceo tekst je u prozorčiću
+    assert not any("drugi red" in re.sub(r"<template>.*?</template>", "", b, flags=re.S) for b in bars)
+    assert any("drugi red" in b for b in bars)
