@@ -924,3 +924,21 @@ popust 25 / 50 / 100 × kazna 0 / 50 daje najviše 41 -> 39, bez cene, 2–4
 promenjene rečenice; čitanje (ponovljeni jednom) 1 : 1 : 1. Tek kazna 1000
 uz kapu 300 spušta na 31, po ceni od natpisa ispod 14 znakova 6 -> 18 i
 CPS +2. Ne uvodi se — u jednom redu rez nema kuda, kao u krugovima 19–23.
+
+## Obrazac: generično ime klase se sudara tiho (2026-10-14, krug 26)
+
+Ikonica objašnjenja (`<span class="info">`, kružić od 14 px, krug 12) i
+traka obaveštenja (`<div class="flagbar info">`) delile su ime `info`. Obe
+klase imaju istu težinu, `.info` je niže u `app.css`, pa je traka dobila
+`display: inline-grid` i 14 × 14 px. Vidi se samo na strani koja oba
+elementa prikazuje zajedno — prevod uvezenog SRT-a — pa je greška stajala
+četrnaest krugova, i kroz krugove u kojima se CSS čitao. Testovi su gledali
+tekst.
+
+Pravilo: komponenta dobija ime koje ne može da deli sa modifikatorom
+(`why-ic`, ne `info`). Provera bez brauzera (`tests/test_css_sudari.py`):
+klase koje u `app.css` SAMOSTALNO postavljaju `display` su komponente;
+element sa dve takve je sudar. Na kodu pre popravke: 37 komponenti, tačno
+jedan sudar — ovaj. Klasa bez ijednog pravila u markupu je tri (`clean`,
+`take`, `worker-state`), sve namerne (stanje, JS kuka, sestrinska klasa);
+nijedna iz krugova 20–25.

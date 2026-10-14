@@ -1839,7 +1839,7 @@ def test_ispod_trake_editora_samo_zivi_red(web):
     for polje, prvi in (("Profil", "Određuje koliko znakova"), ("Slova", "Menja samo izgled"),
                         ("Interpunkcija", "Izostavljena interpunkcija")):
         # ikonica odmah iza oznake, u istom redu; tekst je u prozorčiću
-        assert f'<span class="field-label">{polje}<span class="info"' in traka.replace("\n", "").replace("      ", ""), polje
+        assert f'<span class="field-label">{polje}<span class="why-ic"' in traka.replace("\n", "").replace("      ", ""), polje
         assert prvi in _info(traka, polje), polje
     assert "Kako se profili razlikuju" in _info(traka, "Profil")
     ispod = _deo(page, 'id="edwhat"', "<table")
@@ -1872,10 +1872,10 @@ def test_pocetna_bez_suvisnih_redova(web):
     snimak = _deo(page, 'action="/jobs"', "</form>")
     assert 'class="hint"' not in snimak
     # krug 12: polje za fajl ima oznaku kao svako drugo, ikonica uz nju
-    assert '<span class="lbl field-label">Snimak<span class="info"' in snimak
+    assert '<span class="lbl field-label">Snimak<span class="why-ic"' in snimak
     assert "Audio ili video" in _info(snimak, "Snimak")
     assert "Za srpski obavezno" in _info(snimak, "Jezik u snimku")
-    assert '<span class="lbl field-label">SRT fajl<span class="info"' in srt
+    assert '<span class="lbl field-label">SRT fajl<span class="why-ic"' in srt
 
 
 def test_filter_i_termini_tek_u_razvijenom_ponovi(web):
@@ -2159,14 +2159,14 @@ def test_pravilo1_i_2_na_iscrtanim_stranama(web):
             assert re.search(r'id="(termini|versions-box|ponovi|dnevnik)"', tag), (url, tag)
         assert 'class="hint"' not in page.replace('class="hint err"', ""), url
         # svaka ikonica nosi ime polja i nikad ne stoji sama u svom redu
-        for label in re.findall(r'class="info"[^>]*aria-label="([^"]*)"', page, re.S):
+        for label in re.findall(r'class="why-ic"[^>]*aria-label="([^"]*)"', page, re.S):
             assert label.startswith("Objašnjenje: ") and len(label) > 14, (url, label)
-        assert not re.search(r'<(div|p)[^>]*>\s*<span class="info"', page), url
+        assert not re.search(r'<(div|p)[^>]*>\s*<span class="why-ic"', page), url
 
 
 def test_pravilo2_ikonica_14px_tanka_6px():
     css = (TEMPLATES.parent / "static" / "app.css").read_text(encoding="utf-8")
-    blok = css.split("\n.info {")[1].split("}")[0]
+    blok = css.split("\n.why-ic {")[1].split("}")[0]
     assert "width: 14px" in blok and "height: 14px" in blok and "margin-left: 6px" in blok
     assert "border: 1px solid" in blok
 
@@ -2306,7 +2306,7 @@ def test_ikonica_centrirana_po_visini():
     css = (TEMPLATES.parent / "static" / "app.css").read_text(encoding="utf-8")
     omot = css.split("\n.field-label {")[1].split("}")[0]
     assert "display: inline-flex" in omot and "align-items: center" in omot and "gap: 6px" in omot
-    assert "vertical-align: middle" not in css.split("\n.info {")[1].split("}")[0]
+    assert "vertical-align: middle" not in css.split("\n.why-ic {")[1].split("}")[0]
 
 
 def _roditelji_ikonica(html):
@@ -2322,7 +2322,7 @@ def _roditelji_ikonica(html):
 
         def handle_starttag(self, tag, attrs):
             a = dict(attrs)
-            if "info" in (a.get("class") or "").split():
+            if "why-ic" in (a.get("class") or "").split():
                 self.out.append(self.stek[-1] if self.stek else None)
             if tag not in VOID:
                 self.stek.append(a.get("class") or "")

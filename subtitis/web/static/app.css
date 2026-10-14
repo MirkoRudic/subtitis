@@ -482,16 +482,16 @@ details.terms-toggle { margin-top: 10px; }
 
 /* Info ikonica: 14 px, tanka linija, prigušena; uvek u redu sa oznakom,
    6 px iza teksta, poravnata po osnovnoj liniji. Pomoć, ne upozorenje. */
-.info {
+.why-ic {
   display: inline-grid; place-items: center; box-sizing: border-box;
   width: 14px; height: 14px; margin-left: 6px; vertical-align: -2px;
   border: 1px solid var(--line); border-radius: 50%; cursor: pointer;
   color: var(--faint); font: 500 9px/1 var(--font-mono); letter-spacing: 0; text-transform: none;
   user-select: none; flex: none;
 }
-.info::before { content: "i"; }
-.info > template { display: none; }
-.info:hover, .info:focus-visible, .info[aria-expanded="true"] { color: var(--accent); border-color: var(--accent-dim); outline: none; }
+.why-ic::before { content: "i"; }
+.why-ic > template { display: none; }
+.why-ic:hover, .why-ic:focus-visible, .why-ic[aria-expanded="true"] { color: var(--accent); border-color: var(--accent-dim); outline: none; }
 
 /* Prozorčić objašnjenja: jedan za celu stranu, lebdi, ništa ne pomera. */
 .pop {
@@ -565,4 +565,4 @@ form.retry { margin: 0; }
    je ikonicu spuštao ispod verzala (sredina = x-visina, a verzal nema
    x-visinu na sredini slova) i lomio se pri svakoj promeni veličine fonta. */
 .field-label { display: inline-flex; align-items: center; gap: 6px; }
-.field-label > .info { margin-left: 0; vertical-align: baseline; flex: none; }
+.field-label > .why-ic { margin-left: 0; vertical-align: baseline; flex: none; }
