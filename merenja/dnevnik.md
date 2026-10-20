@@ -963,3 +963,15 @@ svaki par `.a.b` čiji `b` ima i samostalno pravilo, svojstva tog pravila
 koja ni `.a` ni `.a.b` ne postavljaju cure u komponentu. Na kodu pre
 popravke: tačno jedno curenje, `.flagbar.err` <- `white-space`. Popravka:
 `pre-wrap` je samo na `pre.err`.
+
+## 2026-10-20 — Krug 28: pokretač iz `.venv` vara proveru procesa (dva puta)
+
+Na Windows-u je `.venv\Scripts\python(w).exe` samo pokretač: odmah pravi
+osnovni interpreter kao dete i čeka ga. Zato (1) port servera drži proces
+čiji je izvršni fajl VAN foldera aplikacije, a pokretač mu je roditelj —
+provera „izvršni fajl u folderu aplikacije" za pravi server uvek odbija; i
+(2) proces stavljen u Job objekat posle pokretanja nije onaj koji radi — dete
+je već van Job-a. Prvi test preživljavanja je zato „prolazio" i u varijanti
+bez izlaza iz Job-a. Pravilo: proveru procesa raditi na osnovnom
+interpreteru (`sys._base_executable`) i potvrditi je (`IsProcessInJob`), a
+identitet servera tražiti preko porta i `/api/identity`, ne preko putanje.

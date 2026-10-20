@@ -25,3 +25,7 @@ Pillow>=10           # i za scripts/make_icon.py
 pytest>=8.0
 httpx>=0.28          # fastapi.testclient
 coverage>=7          # razvojno: pokrivenost testovima (krug 15)
+
+# MCP server (`subtitis mcp`, krug 28) — Claude desktop pokreće alat kroz njega.
+# 1.x: stabilan `FastMCP`; 2.x je menjao API.
+mcp>=1.26,<2

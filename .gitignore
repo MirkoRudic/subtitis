@@ -14,3 +14,17 @@ __pycache__/
 # pokrivenost testovima (krug 15)
 .coverage
 htmlcov/
+
+# Zadaci i izveštaji krugova — radni materijal, ne ide u javni repo.
+krugovi/
+
+# Privremeni fajlovi aplikacije (krug 28): samo u `tmp/`, prazni se pri pokretanju.
+tmp/
+# `static/` se servira i ide u javni repo — tuđi zvuk ili snimak ne sme da uđe
+# sa `git add -A` (krug 28: dva mp3 ostavljena za otpremanje kroz pregledač).
+# Test `test_static_nema_fajlova_van_gita` svejedno pada dok fajl stoji tu.
+subtitis/web/static/_claude_tmp*
+subtitis/web/static/*.mp3
+subtitis/web/static/*.wav
+subtitis/web/static/*.mp4
+subtitis/web/static/*.m4a

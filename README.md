@@ -104,6 +104,9 @@ ffmpeg          : C:\...\ffmpeg-9.0-full_build\bin\ffmpeg.exe   [poznata lokacij
 .venv\Scripts\python -m subtitis info <job_id>
 ```
 
+**Claude desktop (MCP):** Claude u chatu sam pokreće dashboard, poslove, testove i merne skripte i čita prepis — bez ručnog koraka.
+Uključuje se jednom, `.venv\Scripts\python -m subtitis mcp-install` (upiše unos u konfiguraciju Claude aplikacije; `mcp-uninstall` ga skida), pa restart Claude aplikacije.
+
 Korisne zastavice za `transcribe`: `--job-id`, `--model`, `--device cpu`,
 `--compute-type int8`, `--beam-size`, `--glossary`, `--force`, `--no-vad`.
 

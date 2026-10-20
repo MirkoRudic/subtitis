@@ -242,6 +242,14 @@ def skip_queued_tasks(job_id: str, reason: str) -> int:
         return cur.rowcount or 0
 
 
+def running_task() -> sqlite3.Row | None:
+    """Zadatak koji se upravo izvršava (najviše jedan worker) — za `stop`."""
+    with connect() as conn:
+        return conn.execute(
+            "SELECT * FROM tasks WHERE state='running' ORDER BY id LIMIT 1"
+        ).fetchone()
+
+
 def queued_count() -> int:
     """Koliko zadataka čeka ili se izvršava — za indikator u zaglavlju."""
     with connect() as conn:

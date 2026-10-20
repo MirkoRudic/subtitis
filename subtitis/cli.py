@@ -497,7 +497,11 @@ def serve(
     if open_browser:
         # Odloženo: pregledač sme da pozove server tek kad server sluša.
         threading.Timer(1.5, lambda: webbrowser.open(url)).start()
-    uvicorn.run("subtitis.web.app:app", host=host, port=port, log_level="info")
+    server = uvicorn.Server(uvicorn.Config("subtitis.web.app:app", host=host, port=port, log_level="info"))
+    from .web import api
+
+    api.SHUTDOWN = lambda: setattr(server, "should_exit", True)  # `POST /api/shutdown`
+    server.run()
 
 
 @app.command()
@@ -629,3 +633,43 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+@app.command("mcp")
+def mcp_cmd() -> None:
+    """MCP server (stdio) — pokreće ga Claude desktop aplikacija, ne ti."""
+    from .mcp_server import main
+
+    main()
+
+
+@app.command("mcp-install")
+def mcp_install() -> None:
+    """Upiši Subtitis u konfiguraciju Claude desktop aplikacije."""
+    import json as _json
+
+    from .mcp_server import install
+
+    r = install()
+    if r["promenjeno"]:
+        typer.secho(f"Upisano u {r['fajl']}", fg=typer.colors.GREEN)
+        if r.get("rezerva"):
+            typer.echo(f"Prethodna verzija: {r['rezerva']}")
+    else:
+        typer.echo(f"Već upisano, ništa nije menjano: {r['fajl']}")
+    typer.echo('"mcpServers": {"subtitis": ' + _json.dumps(r["unos"], ensure_ascii=False, indent=2) + "}")
+    typer.echo("Restartuj Claude aplikaciju da učita alat.")
+
+
+@app.command("mcp-uninstall")
+def mcp_uninstall() -> None:
+    """Ukloni Subtitis iz konfiguracije Claude desktop aplikacije."""
+    from .mcp_server import uninstall
+
+    r = uninstall()
+    if r["promenjeno"]:
+        typer.secho(f"Uklonjeno iz {r['fajl']}", fg=typer.colors.GREEN)
+        if r.get("rezerva"):
+            typer.echo(f"Prethodna verzija: {r['rezerva']}")
+    else:
+        typer.echo(f"Nije bilo upisano, ništa nije menjano: {r['fajl']}")

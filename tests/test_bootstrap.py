@@ -148,12 +148,17 @@ def test_serve_ne_pada_bez_izlaza(bez_izlaza, monkeypatch):
 
     monkeypatch.setenv(WORKER_ENV, "0")  # da se izmena vrati posle testa
     pokrenuto: dict = {}
-    monkeypatch.setattr(uvicorn, "run", lambda *a, **k: pokrenuto.update(k))
+    # krug 28: `serve` drži `uvicorn.Server` (za `POST /api/shutdown`), ne `uvicorn.run`
+    monkeypatch.setattr(uvicorn.Server, "run", lambda self, *a, **k: pokrenuto.update(host=self.config.host))
+    from subtitis.web import api
+
+    monkeypatch.setattr(api, "SHUTDOWN", None)
 
     bez_izlaza()
     bootstrap.bootstrap()
     cli.serve(host="127.0.0.1", port=free_port(), worker=False, open_browser=False)
     assert pokrenuto["host"] == "127.0.0.1"
+    assert api.SHUTDOWN is not None, "serve registruje gašenje"
 
 
 # --- zapis o padu ----------------------------------------------------------

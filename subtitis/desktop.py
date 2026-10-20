@@ -184,6 +184,12 @@ def run(
     )
     server = uvicorn.Server(config)
 
+    from .web import api
+
+    # `POST /api/shutdown` (krug 28): bez ikonice samo server; sa ikonicom isto
+    # što i „Izađi" — ispod se zamenjuje.
+    api.SHUTDOWN = lambda: setattr(server, "should_exit", True)
+
     # Server u niti, traka u glavnoj: `pystray` na Windows-u traži glavnu nit
     # za petlju poruka.
     thread = threading.Thread(target=server.run, name="subtitis-server", daemon=True)
@@ -225,6 +231,7 @@ def run(
             pystray.MenuItem("Izađi", on_quit),
         ),
     )
+    api.SHUTDOWN = lambda: on_quit(icon, None)
     icon.run()          # blokira do „Izađi"
     thread.join(timeout=5.0)
     return 0

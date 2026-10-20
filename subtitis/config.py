@@ -25,6 +25,26 @@ PROFILES_DIR = ROOT_DIR / "profiles"
 GLOSSARY_DIR = ROOT_DIR / "glossary"
 JOBS_DIR = Path(os.environ.get("SUBTITIS_JOBS_DIR", ROOT_DIR / "jobs"))
 
+#: Privremeni fajlovi — samo ovde, u korenu aplikacije, nikad u `static/` ili
+#: van foldera (Mirkovo pravilo, krug 28). Prazni se pri svakom pokretanju
+#: servera (`empty_tmp`), a ko ga koristi briše za sobom. U `.gitignore`.
+TMP_DIR = Path(os.environ.get("SUBTITIS_TMP_DIR", ROOT_DIR / "tmp"))
+
+
+def empty_tmp() -> int:
+    """Isprazni `TMP_DIR` (pravi ga ako ga nema). Vrati koliko je obrisano."""
+    import shutil
+
+    TMP_DIR.mkdir(parents=True, exist_ok=True)
+    n = 0
+    for p in TMP_DIR.iterdir():
+        try:
+            shutil.rmtree(p) if p.is_dir() else p.unlink()
+            n += 1
+        except OSError:
+            pass  # fajl koji drži drugi proces ostaje do sledećeg pokretanja
+    return n
+
 # --- Podrazumevane vrednosti ----------------------------------------------
 
 DEFAULT_PROFILE = "tv"

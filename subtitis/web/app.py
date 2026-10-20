@@ -123,6 +123,7 @@ def _migrate_profiles() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db.init_db()
+    cfg.empty_tmp()
     _migrate_profiles()
     worker = thread = None
     if worker_in_process():
@@ -1973,9 +1974,13 @@ def favicon() -> Any:
 @app.get("/api/identity")
 def identity() -> Any:
     """Ko sluša na ovom portu. Otvoren port sam po sebi ne znači Subtitis."""
-    from .. import __version__
+    from .. import ROUND, __version__, version_string
+    from .api import queue_info
 
-    return {"app": IDENTITY, "version": __version__, "jobs_dir": str(cfg.JOBS_DIR)}
+    # `queue`, `running`, `pid` (krug 28): `status()` u MCP-u ih čita odavde,
+    # ne iz pretrage procesa.
+    return {"app": IDENTITY, "version": __version__, "round": ROUND,
+            "signature": version_string(), "jobs_dir": str(cfg.JOBS_DIR), **queue_info()}
 
 
 @app.get("/api/jobs/{job_id}/status")
@@ -2132,3 +2137,7 @@ async def discard_shorten(job_id: str, request: Request) -> Any:
     cfg.log(job_id, f"skraćivanje: predlog za {lang} odbačen ceo")
     db.add_event(job_id, "log", f"skraćivanje: predlog za {lang} odbačen ceo")
     return JSONResponse({"discarded": True})
+
+
+# JSON API za MCP (krug 28) — u svom modulu, registruje rute na `app`.
+from . import api  # noqa: E402,F401
