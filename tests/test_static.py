@@ -61,4 +61,5 @@ def test_server_prazni_tmp_pri_pokretanju(tmp_path, monkeypatch):
     (tmp_path / "tmp").mkdir()
     (tmp_path / "tmp" / "ostalo.wav").write_bytes(b"x")
     with TestClient(app_mod.app):
-        assert list((tmp_path / "tmp").iterdir()) == []
+        # ostaje samo PID ovog servera (krug 29)
+        assert [p.name for p in (tmp_path / "tmp").iterdir()] == ["server.pid"]

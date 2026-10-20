@@ -14,7 +14,7 @@ from typing import Any
 __version__ = "1.5.0"
 
 #: Krug rada u kome je napravljen ovaj kod — raste sa svakim krugom.
-ROUND = 28
+ROUND = 29
 
 SCHEMA_VERSION = 1
 

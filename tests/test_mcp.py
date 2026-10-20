@@ -37,7 +37,6 @@ def api(tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "JOBS_DIR", tmp_path / "jobs")
     monkeypatch.setattr(cfg, "CONFIG_FILE", tmp_path / "subtitis.toml")
     monkeypatch.setattr(cfg, "GLOSSARY_DIR", tmp_path / "glossary")
-    monkeypatch.setattr(cfg, "TMP_DIR", tmp_path / "tmp")
     monkeypatch.setattr(cfg, "_settings_cache", None)
     db.init_db()
     with TestClient(app_mod.app) as client:
@@ -123,21 +122,75 @@ def test_gasenje_odbija_dok_radi_osim_uz_force(api, monkeypatch):
     assert r["ugasen"] is True and r["prekinut"]["job"] == jid and called == [1]
 
 
-def test_rezerva_gasi_samo_vlasnika_porta_iz_foldera_aplikacije(monkeypatch):
-    """Server ne odgovara: gasi se tačno jedan proces, i samo ako je naš."""
+def _rezerva(monkeypatch, owner_pid, rec):
+    """Server ne odgovara, port drži `owner_pid`, `tmp/server.pid` je `rec`."""
+    from subtitis import config as cfg
+
     _not_running(monkeypatch)
     monkeypatch.setattr(m, "_port_open", lambda port: True)
+    monkeypatch.setattr(m, "_port_owner", lambda port: {"pid": owner_pid, "exe": r"C:\Python311\pythonw.exe"})
     killed = []
     monkeypatch.setattr(m, "_kill", lambda pid: killed.append(pid))
-    monkeypatch.setattr(m, "_port_owner", lambda port: {
-        "pid": 111, "exe": r"C:\Users\x\AppData\Local\Programs\Python\Python311\pythonw.exe"})
+    cfg.server_pid_path().unlink(missing_ok=True)
+    if rec is not None:
+        cfg.write_json(cfg.server_pid_path(), rec)
+    return killed
+
+
+def test_rezerva_bez_pid_fajla_ne_gasi_nista(monkeypatch):
+    killed = _rezerva(monkeypatch, 111, None)
     r = m.stop()
-    assert r["ugasen"] is False and "Ne gasim ništa" in r["poruka"] and "111" in r["poruka"]
-    assert killed == []
-    monkeypatch.setattr(m, "_port_owner", lambda port: {
-        "pid": 222, "exe": str(m.ROOT / ".venv" / "Scripts" / "pythonw.exe")})
+    assert r["ugasen"] is False and "ne postoji" in r["poruka"] and killed == []
+
+
+def test_rezerva_kad_se_brojevi_ne_poklope_javi_oba_i_stane(monkeypatch):
+    import os
+
+    from subtitis.proc import start_time
+
+    killed = _rezerva(monkeypatch, 111, {"pid": os.getpid(), "started": start_time(os.getpid())})
     r = m.stop()
-    assert killed == [222], "samo vlasnik porta, nikad roditelj ni stablo"
+    assert r["ugasen"] is False and killed == []
+    assert r["vlasnik_porta"] == 111 and r["server_pid"] == os.getpid()
+    assert "111" in r["poruka"] and str(os.getpid()) in r["poruka"]
+
+
+def test_rezerva_zaostao_fajl_sa_tudjim_pidom_ne_gasi(monkeypatch):
+    """Isti PID, ali drugo vreme pokretanja — PID je u međuvremenu dobio drugi proces."""
+    import os
+
+    from subtitis.proc import start_time
+
+    killed = _rezerva(monkeypatch, os.getpid(), {"pid": os.getpid(), "started": start_time(os.getpid()) - 1})
+    r = m.stop()
+    assert r["ugasen"] is False and "zaostao fajl" in r["poruka"] and killed == []
+
+
+def test_rezerva_gasi_tacno_server_iz_pid_fajla(monkeypatch):
+    import os
+
+    from subtitis.proc import start_time
+
+    killed = _rezerva(monkeypatch, os.getpid(), {"pid": os.getpid(), "started": start_time(os.getpid())})
+    r = m.stop()
+    assert killed == [os.getpid()], "tačno jedan proces, nikad roditelj ni stablo"
+    assert "iz server.pid" in r["poruka"]
+
+
+def test_server_pise_pid_i_brise_ga_pri_urednom_gasenju(tmp_path, monkeypatch):
+    import os
+
+    from fastapi.testclient import TestClient
+
+    from subtitis import config as cfg
+    from subtitis.proc import start_time
+    from subtitis.web import app as app_mod
+
+    monkeypatch.setattr(cfg, "JOBS_DIR", tmp_path / "jobs")
+    with TestClient(app_mod.app):
+        rec = json.loads(cfg.server_pid_path().read_text(encoding="utf-8"))
+        assert rec["pid"] == os.getpid() and rec["started"] == start_time(os.getpid())
+    assert not cfg.server_pid_path().exists()
 
 
 def test_start_ne_dize_drugi_kad_vec_radi(api, monkeypatch):
@@ -260,26 +313,120 @@ def test_script_samo_sa_spiska(monkeypatch):
     assert "nije na spisku" in m.script("make_icon")["greska"]
     assert "nije dozvoljen" in m.script("krug25", ["a; rm -rf"])["greska"]
     seen = {}
-
-    def fake_run(args, timeout):
-        seen["args"] = args
-        return type("R", (), {"returncode": 0, "stdout": "8 poslova\n", "stderr": ""})()
-
-    monkeypatch.setattr(m, "_run", fake_run)
-    r = m.script("krug25.py", ["udaljenost"])
-    assert r["kod"] == 0 and r["izlaz"] == "8 poslova\n"
-    assert seen["args"][1].endswith("krug25.py") and seen["args"][2:] == ["udaljenost"]
+    monkeypatch.setattr(m, "_launch", lambda kind, args: seen.update(kind=kind, args=args) or {"oznaka": "x"})
+    assert m.script("krug25.py", ["udaljenost"]) == {"oznaka": "x"}
+    assert seen["kind"] == "script" and seen["args"][0].endswith("krug25.py") and seen["args"][1:] == ["udaljenost"]
 
 
-def test_tests_stvarno_pokrece_i_brise_za_sobom(tmp_path, monkeypatch):
+def test_tests_samo_unutar_foldera_tests():
+    """Bezbednosni pregled kruga 28: `tests/../x.py` bi pytestu dao bilo koji .py."""
+    assert "nije unutar tests/" in m.tests("tests/../subtitis/cli.py")["greska"]
+    assert "nije unutar tests/" in m.tests("tests\\..\\scripts\\krug25.py")["greska"]
+    assert m._tests_args("tests/test_srt.py::test_x") == ["tests/test_srt.py::test_x"]
+    assert m._tests_args("sudar and not proces") == ["-k", "sudar and not proces"]
+
+
+def _cekaj(oznaka, sekundi=180):
+    import time
+
+    deadline = time.monotonic() + sekundi
+    while time.monotonic() < deadline:
+        r = m.zadatak(oznaka)
+        if r.get("gotovo") or "greska" in r:
+            return r
+        assert r["traje_s"] >= 0 and r["vrsta"] in ("tests", "script")
+        time.sleep(0.5)
+    raise AssertionError("nije završeno")
+
+
+def test_tests_vraca_odmah_pa_zadatak_daje_rezultat():
+    """Krug 29: veza do Claude-a ističe posle ~60 s — `tests` ne sme da čeka."""
+    import time
+
+    t0 = time.monotonic()
+    r = m.tests("tests/test_css_sudari.py")
+    assert time.monotonic() - t0 < 5, "mora da vrati odmah"
+    assert r["radi"] is True and r["oznaka"].startswith("tests-")
+    prvi = m.zadatak(r["oznaka"])
+    assert prvi.get("gotovo") is False and "traje_s" in prvi
+    res = _cekaj(r["oznaka"])
+    assert res["gotovo"] and res["palo"] == 0 and res["proslo"] >= 5 and res["pokrivenost"].endswith("%")
+    d = m.runs_dir() / r["oznaka"]
+    assert sorted(x.name for x in d.iterdir()) == ["meta.json", "result.json"], "privremeno obrisano"
+
+
+def test_script_u_pozadini_pa_rezultat(monkeypatch):
+    monkeypatch.setitem(m.WORKERS, "script", lambda args, work: {"kod": 0, "izlaz": "ok"})
+    r = m._launch("script", ["x"])
+    assert m.run_main(r["oznaka"]) == 0  # pokretač u istom procesu, bez čekanja
+    res = m.zadatak(r["oznaka"])
+    assert res == {"gotovo": True, "oznaka": r["oznaka"], "vrsta": "script", "kod": 0, "izlaz": "ok"}
+
+
+def test_zadatak_prekinut_i_nepoznat():
     from subtitis import config as cfg
 
-    monkeypatch.setattr(cfg, "TMP_DIR", tmp_path / "tmp")
-    r = m.tests("tests/test_css_sudari.py")
-    assert r["palo"] == 0 and r["proslo"] >= 5 and r["pokrivenost"].endswith("%")
-    assert list((tmp_path / "tmp").iterdir()) == [], "privremeni fajlovi obrisani"
-    r = m.tests("tests/test_css_sudari.py::test_nema_takvog")
-    assert "greska" in r or (r["proslo"] == 0 and r["palo"] == 0)
+    assert "Nepoznata oznaka" in m.zadatak("../../etc")["greska"]
+    assert "Nema pokretanja" in m.zadatak("tests-20261020-120000-abcdef")["greska"]
+    d = m.runs_dir() / "tests-20261020-120000-000000"
+    d.mkdir(parents=True)
+    cfg.write_json(d / "meta.json", {"kind": "tests", "args": [], "started_at": 0, "pid": 999999, "pid_started": 1})
+    assert "prekinuto" in m.zadatak("tests-20261020-120000-000000")["greska"]
+
+
+def test_ciscenje_tmp_ne_brise_pokretanje_koje_radi():
+    import os
+
+    from subtitis import config as cfg
+    from subtitis.proc import start_time
+
+    radi = m.runs_dir() / "tests-20261020-120000-aaaaaa"
+    gotov = m.runs_dir() / "tests-20261020-120000-bbbbbb"
+    for d in (radi, gotov):
+        d.mkdir(parents=True)
+        cfg.write_json(d / "meta.json", {"kind": "tests", "args": [], "started_at": 0,
+                                         "pid": os.getpid(), "pid_started": start_time(os.getpid())})
+    (gotov / "result.json").write_text("{}", encoding="utf-8")
+    cfg.empty_tmp()
+    assert radi.exists() and not gotov.exists()
+
+
+def test_rebuild_dug_vraca_da_se_prati(api, monkeypatch):
+    import httpx
+
+    client, db, cfg = api
+    jid = make_job(cfg, db)
+
+    def spor(*a, **kw):
+        assert kw.get("timeout") == m.REBUILD_TIMEOUT
+        raise httpx.ReadTimeout("spor")
+
+    monkeypatch.setattr(m, "_call", spor)
+    r = m.rebuild(jid, "tv")
+    assert r["gotovo"] is False and "job(id)" in r["poruka"]
+
+
+def test_start_koji_ne_stigne_ne_vraca_gresku(monkeypatch):
+    monkeypatch.setattr(m, "find_server", lambda: None)
+    monkeypatch.setattr(m, "spawn_detached", lambda: "odvojen proces")
+    monkeypatch.setattr(m, "START_TIMEOUT", 0.6)
+    r = m.start()
+    assert r["pokrenut"] is True and r["radi"] is False and "status()" in r["poruka"]
+
+
+def test_nijedan_alat_ne_ceka_blizu_granice_veze():
+    """Krug 29: veza ističe posle ~60 s; svaka granica čekanja ostaje ispod pola minuta."""
+    assert m.START_TIMEOUT <= 20 and m.HTTP_TIMEOUT <= 20 and m.REBUILD_TIMEOUT <= 20
+    assert m.STOP_TIMEOUT + m.SHUTDOWN_TIMEOUT <= 20
+    assert m.PORT_SCAN * 0.5 <= 15  # `find_server` u najgorem slučaju
+
+
+def test_tudji_host_se_odbija(api):
+    """DNS rebinding: zahtev sa tuđim `Host` ne sme da stigne do API-ja."""
+    client, db, cfg = api
+    assert client.get("/api/identity", headers={"host": "napadac.example:8010"}).status_code == 400
+    assert client.get("/api/identity", headers={"host": "127.0.0.1:8010"}).status_code == 200
+    assert client.get("/api/identity", headers={"host": "localhost:8010"}).status_code == 200
 
 
 # --------------------------------------------------------------------------
@@ -332,7 +479,7 @@ def test_mcp_server_ima_sve_alate():
 
     names = {t.name for t in asyncio.run(m.build_server().list_tools())}
     assert names == {"status", "start", "stop", "jobs", "job", "transcribe", "translate",
-                     "rebuild", "export", "text", "flags", "tests", "script"}
+                     "rebuild", "export", "text", "flags", "tests", "script", "zadatak"}
 
 
 def test_stari_dashboard_bez_rute_kaze_da_je_star(api, monkeypatch):
@@ -340,3 +487,15 @@ def test_stari_dashboard_bez_rute_kaze_da_je_star(api, monkeypatch):
     monkeypatch.setattr(m, "find_server", lambda: (8010, {"version": "1.5.0"}))
     r = m._safe(lambda: m._call("GET", "/api/nepostojeca-ruta"))()
     assert "starija verzija (1.5.0)" in r["greska"]
+
+
+def test_jezik_ne_sme_da_izadje_iz_posla(api):
+    """Bezbednosni pregled kruga 28: jezik ide u ime fajla."""
+    client, db, cfg = api
+    jid = make_job(cfg, db)
+    for bad in ("../../x", "sr/../..", "sr.json", "SR-latn-x"):
+        assert "Neispravna oznaka jezika" in m.text(jid, bad)["greska"], bad
+        assert "Neispravna oznaka jezika" in m.export(jid, bad)["greska"], bad
+    assert "Neispravna oznaka jezika" in m.translate(jid, ["../en"])["greska"]
+    assert "Neispravna oznaka jezika" in m.rebuild(jid, "tv", jezik="..")["greska"]
+    assert m.text(jid, "sr")["lang"] == "sr"

@@ -975,3 +975,19 @@ je već van Job-a. Prvi test preživljavanja je zato „prolazio" i u varijanti
 bez izlaza iz Job-a. Pravilo: proveru procesa raditi na osnovnom
 interpreteru (`sys._base_executable`) i potvrditi je (`IsProcessInJob`), a
 identitet servera tražiti preko porta i `/api/identity`, ne preko putanje.
+
+## 2026-10-20 — Krug 29: granica veze, PID fajl, i Python koji ne vidi HTTPS
+
+- Veza kojom Claude dolazi do MCP procesa ističe posle ~60 s; svaki alat je
+  sada ispod pola minuta i u najgorem slučaju, a duge radnje (`tests`,
+  `script`) idu u pozadinu i prate se preko `zadatak(oznaka)`. `rebuild` na
+  svih 87 prelamanja iz istorije: najduže 3,1 s.
+- Rezerva gašenja ide preko `tmp/server.pid` (PID + vreme pokretanja iz
+  Windows-a); provereno nad pravim serverom — upisani PID je vlasnik porta.
+- Svaki test sa `TestClient`-om je praznio pravi `tmp/` (server ga prazni pri
+  pokretanju) — i tako brisao izlaz `tests()` koji pokreće te iste testove.
+- Na ovoj mašini sistemski Python 3.11 ne može da otvori nijednu HTTPS vezu:
+  7 MUP sertifikata u Windows CA skladištu OpenSSL ne može da pročita, a
+  `ssl.create_default_context()` učitava sve. Zato je pala automatska
+  bezbednosna provera. Python 3.14 ih preživljava; `.venv` alati (httpx,
+  pip) koriste `certifi` i ne osećaju ovo.

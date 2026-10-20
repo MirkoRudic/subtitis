@@ -46,9 +46,15 @@ ROOT = cfg.ROOT_DIR
 
 #: Koliko portova iznad podešenog se pita (isto kao `desktop.choose_port`).
 PORT_SCAN = 20
-START_TIMEOUT = 30.0
-STOP_TIMEOUT = 15.0
-HTTP_TIMEOUT = 60.0  # `rebuild` je sinhron
+#: Veza kojom Claude dolazi do ovog procesa ističe posle ~60 s (krug 29: poziv
+#: `tests()` je pukao baš tu). Nijedan alat ne sme da čeka blizu toga: dugo se
+#: radi u pozadini i prati se (`job`, `zadatak`). Ove granice drže svaki alat
+#: ispod pola minuta i u najgorem slučaju.
+START_TIMEOUT = 20.0
+STOP_TIMEOUT = 10.0
+SHUTDOWN_TIMEOUT = 5.0
+HTTP_TIMEOUT = 20.0
+REBUILD_TIMEOUT = 20.0  # prelamanje filma od 320 cue-ova: najviše 3,1 s (krug 29)
 
 DETACHED_PROCESS = 0x00000008
 CREATE_NEW_PROCESS_GROUP = 0x00000200
@@ -242,7 +248,10 @@ def start() -> dict[str, Any]:
         if find_server() is not None:
             return {**status(), "pokrenut": True, "nacin": how}
         time.sleep(0.5)
-    raise ToolError(f"Pokrenut ({how}), ali za {START_TIMEOUT:.0f} s ne odgovara. Vidi jobs/console.log.")
+    # Ne greška: hladno pokretanje ume da traje. Proces radi, odgovoriće.
+    return {"radi": False, "pokrenut": True, "nacin": how,
+            "poruka": f"Pokrenut, ali za {START_TIMEOUT:.0f} s još ne odgovara — pitaj status() "
+                      "za nekoliko sekundi. Ako ni tada ne odgovara, vidi jobs/console.log."}
 
 
 def _port_owner(port: int) -> dict[str, Any] | None:
@@ -258,15 +267,6 @@ def _port_owner(port: int) -> dict[str, Any] | None:
     return json.loads(out) if out else None
 
 
-def _inside_app(exe: str | None) -> bool:
-    if not exe:
-        return False
-    try:
-        return Path(exe).resolve().is_relative_to(ROOT.resolve())
-    except OSError:
-        return False
-
-
 def _kill(pid: int) -> None:
     subprocess.run(["taskkill", "/PID", str(int(pid)), "/F"], capture_output=True, timeout=30)
 
@@ -277,20 +277,38 @@ def _port_open(port: int) -> bool:
     return port_in_use("127.0.0.1", port)
 
 
+def _read_server_pid() -> dict[str, Any] | None:
+    try:
+        return json.loads(cfg.server_pid_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
 def _fallback(port: int) -> dict[str, Any]:
-    """Server ne odgovara: gasi se samo vlasnik porta, i to samo ako je naš."""
+    """Server ne odgovara: gasi se TAČNO jedan proces — vlasnik porta — i samo
+    ako je to baš server koji je zapisao `tmp/server.pid` (isti PID i isto
+    vreme pokretanja; zaostao fajl pale instance ne sme da ugasi tuđ proces koji
+    je u međuvremenu dobio isti PID). Nikad roditelj ni stablo procesa."""
+    from .proc import same_process
+
     owner = _port_owner(port)
     if owner is None:
         return {"ugasen": True, "poruka": f"Na portu {port} više niko ne sluša."}
-    if not _inside_app(owner.get("exe")):
-        return {
-            "ugasen": False, "port": port, "pid": owner.get("pid"), "exe": owner.get("exe"),
-            "poruka": (f"Port {port} drži PID {owner.get('pid')} ({owner.get('exe')}), a izvršni fajl "
-                       f"nije u folderu aplikacije ({ROOT}). Ne gasim ništa."),
-        }
-    _kill(owner["pid"])
-    return {"ugasen": not _port_open(port), "port": port, "pid": owner["pid"],
-            "poruka": f"Server nije odgovarao; ugašen PID {owner['pid']} (vlasnik porta)."}
+    rec = _read_server_pid()
+    base = {"ugasen": False, "port": port, "vlasnik_porta": owner.get("pid"), "exe": owner.get("exe")}
+    if rec is None:
+        return {**base, "poruka": f"Port {port} drži PID {owner.get('pid')}, a {cfg.server_pid_path()} "
+                                  "ne postoji — ne znam da li je to Subtitis. Ne gasim ništa."}
+    base["server_pid"] = rec.get("pid")
+    if rec.get("pid") != owner.get("pid"):
+        return {**base, "poruka": f"Port {port} drži PID {owner.get('pid')}, a server.pid kaže "
+                                  f"{rec.get('pid')}. Brojevi se ne poklapaju — ne gasim ništa."}
+    if not same_process(rec["pid"], rec.get("started")):
+        return {**base, "poruka": f"PID {rec['pid']} postoji, ali nije pokrenut kad i server koji je "
+                                  "zapisao server.pid (zaostao fajl). Ne gasim ništa."}
+    _kill(rec["pid"])
+    return {"ugasen": not _port_open(port), "port": port, "pid": rec["pid"],
+            "poruka": f"Server nije odgovarao; ugašen PID {rec['pid']} (vlasnik porta, iz server.pid)."}
 
 
 @_safe
@@ -307,7 +325,7 @@ def stop(force: bool = False) -> dict[str, Any]:
     port = srv[0]
     try:
         with _http(port) as c:
-            r = c.post("/api/shutdown", json={"force": force}, timeout=10)
+            r = c.post("/api/shutdown", json={"force": force}, timeout=SHUTDOWN_TIMEOUT)
     except httpx.HTTPError:
         return _fallback(port)
     if r.status_code == 409:
@@ -359,9 +377,16 @@ def translate(id: str, jezici: list[str]) -> dict[str, Any]:  # noqa: A002
 @_safe
 def rebuild(id: str, profil: str | None = None, pismo: str = "Latn", slova: str = "normal",  # noqa: A002
             interpunkcija: str = "keep", jezik: str | None = None) -> dict[str, Any]:
-    """Prelomi odmah (sinhrono, kao editor)."""
-    return _call("POST", f"/api/jobs/{id}/rebuild", json={
-        "language": jezik, "profile": profil, "script": pismo, "case": slova, "punct": interpunkcija})
+    """Prelomi odmah (sinhrono, kao editor). Ako potraje duže od 20 s, server
+    nastavlja sam, a alat vraća da se prati preko job(id)."""
+    import httpx
+
+    try:
+        return _call("POST", f"/api/jobs/{id}/rebuild", timeout=REBUILD_TIMEOUT, json={
+            "language": jezik, "profile": profil, "script": pismo, "case": slova, "punct": interpunkcija})
+    except httpx.TimeoutException:
+        return {"gotovo": False, "poruka": f"Prelamanje traje duže od {REBUILD_TIMEOUT:.0f} s; server ga "
+                                           "završava sam — prati job(id), pa export(id)."}
 
 
 @_safe
@@ -411,48 +436,52 @@ def _run(args: list[str], timeout: float) -> subprocess.CompletedProcess:
                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
 
-@_safe
-def tests(obrazac: str | None = None) -> dict[str, Any]:
-    """pytest uz pokrivenost: prošlo, palo, pokrivenost; poruke samo za palo.
-    `obrazac` je putanja (`tests/test_srt.py`) ili `-k` izraz."""
-    work = cfg.TMP_DIR / f"tests-{os.getpid()}-{time.time_ns()}"
-    work.mkdir(parents=True, exist_ok=True)
+def _tests_args(obrazac: str | None) -> list[str]:
+    """Izbor testova za pytest: putanja UNUTAR `tests/` ili `-k` izraz.
+    Putanja van `tests/` (`tests/../x.py`) bi pustila pytest da izvrši bilo
+    koji .py na disku kao test (bezbednosni pregled kruga 28)."""
+    if not obrazac:
+        return []
+    if not _ARG_RE.match(obrazac.replace(" ", "_")):
+        raise ToolError("Obrazac sme da ima samo slova, brojeve i . , : = / \\ - _ i razmak.")
+    if not obrazac.startswith("tests"):
+        return ["-k", obrazac]
+    target = (ROOT / obrazac.split("::")[0]).resolve()
+    if not target.is_relative_to((ROOT / "tests").resolve()):
+        raise ToolError(f"Putanja {obrazac!r} nije unutar tests/.")
+    return [obrazac]
+
+
+def _tests_work(sel: list[str], work: Path) -> dict[str, Any]:
+    """Pravi posao `tests()` — u pokretaču, ne u alatu."""
     data, junit = work / ".coverage", work / "junit.xml"
-    sel: list[str] = []
-    if obrazac:
-        if not _ARG_RE.match(obrazac.replace(" ", "_")):
-            raise ToolError("Obrazac sme da ima samo slova, brojeve i . , : = / \\ - _ i razmak.")
-        sel = [obrazac] if obrazac.startswith("tests") else ["-k", obrazac]
     t0 = time.monotonic()
-    try:
-        _run([_python(), "-m", "coverage", "run", f"--data-file={data}", "-m", "pytest", "-q",
-              "-p", "no:cacheprovider", f"--junitxml={junit}", *sel], timeout=1800)
-        rep = _run([_python(), "-m", "coverage", "report", f"--data-file={data}"], timeout=300)
-        if not junit.exists():
-            raise ToolError("pytest nije napravio izveštaj — obrazac ne odgovara nijednom testu?")
-        # junit.xml je naš, iz `tmp/` — ne tuđ ulaz (XXE nije pretnja)
-        suite = ET.parse(junit).getroot()
-        suite = suite if suite.tag == "testsuite" else suite.find("testsuite")
-        failures = []
-        for tc in suite.iter("testcase"):
-            bad = tc.find("failure") if tc.find("failure") is not None else tc.find("error")
-            if bad is not None and len(failures) < 20:
-                msg = (bad.get("message") or bad.text or "").strip().splitlines()
-                failures.append({"test": f"{tc.get('classname')}::{tc.get('name')}",
-                                 "poruka": "\n".join(msg[:6])[:800]})
-        total = re.search(r"^TOTAL.*?(\d+)%\s*$", rep.stdout, re.M)
-        n = int(suite.get("tests", 0))
-        failed, errors, skipped = (int(suite.get(k, 0)) for k in ("failures", "errors", "skipped"))
-        return {"proslo": n - failed - errors - skipped, "palo": failed, "greske": errors,
-                "preskoceno": skipped, "pokrivenost": f"{total.group(1)} %" if total else None,
-                "trajanje_s": round(time.monotonic() - t0, 1), "palo_detalji": failures}
-    finally:
-        shutil.rmtree(work, ignore_errors=True)  # privremeno se briše za sobom
+    _run([_python(), "-m", "coverage", "run", f"--data-file={data}", "-m", "pytest", "-q",
+          "-p", "no:cacheprovider", f"--junitxml={junit}", *sel], timeout=3600)
+    rep = _run([_python(), "-m", "coverage", "report", f"--data-file={data}"], timeout=600)
+    if not junit.exists():
+        raise ToolError("pytest nije napravio izveštaj — obrazac ne odgovara nijednom testu?")
+    # junit.xml je naš, iz `tmp/` — ne tuđ ulaz (XXE nije pretnja)
+    suite = ET.parse(junit).getroot()
+    suite = suite if suite.tag == "testsuite" else suite.find("testsuite")
+    failures = []
+    for tc in suite.iter("testcase"):
+        bad = tc.find("failure") if tc.find("failure") is not None else tc.find("error")
+        if bad is not None and len(failures) < 20:
+            msg = (bad.get("message") or bad.text or "").strip().splitlines()
+            failures.append({"test": f"{tc.get('classname')}::{tc.get('name')}",
+                             "poruka": "\n".join(msg[:6])[:800]})
+    total = re.search(r"^TOTAL.*?(\d+)%\s*$", rep.stdout, re.M)
+    n = int(suite.get("tests", 0))
+    failed, errors, skipped = (int(suite.get(k, 0)) for k in ("failures", "errors", "skipped"))
+    for f in (data, junit):
+        f.unlink(missing_ok=True)  # privremeno se briše za sobom; ostaje samo rezultat
+    return {"proslo": n - failed - errors - skipped, "palo": failed, "greske": errors,
+            "preskoceno": skipped, "pokrivenost": f"{total.group(1)} %" if total else None,
+            "trajanje_s": round(time.monotonic() - t0, 1), "palo_detalji": failures}
 
 
-@_safe
-def script(ime: str, argumenti: list[str] | None = None) -> dict[str, Any]:
-    """Izlaz merne skripte iz `scripts/` (samo sa zatvorenog spiska)."""
+def _script_args(ime: str, argumenti: list[str] | None) -> list[str]:
     name = ime[:-3] if ime.endswith(".py") else ime
     if name not in SCRIPTS:
         raise ToolError(f"Skripta {ime!r} nije na spisku dozvoljenih: {', '.join(SCRIPTS)}.")
@@ -460,15 +489,110 @@ def script(ime: str, argumenti: list[str] | None = None) -> dict[str, Any]:
     for a in args:
         if not _ARG_RE.match(a):
             raise ToolError(f"Argument {a!r} nije dozvoljen (samo slova, brojevi i . , : = / \\ - _).")
+    return [str(ROOT / "scripts" / f"{name}.py"), *args]
+
+
+def _script_work(args: list[str], work: Path) -> dict[str, Any]:
     t0 = time.monotonic()
-    r = _run([_python(), str(ROOT / "scripts" / f"{name}.py"), *args], timeout=1200)
+    r = _run([_python(), *args], timeout=3600)
     out = r.stdout
-    cut = len(out) > 20000
-    return {"kod": r.returncode, "izlaz": out[-20000:], "skraceno": cut,
+    return {"kod": r.returncode, "izlaz": out[-20000:], "skraceno": len(out) > 20000,
             "greske": r.stderr[-3000:] if r.returncode else "", "trajanje_s": round(time.monotonic() - t0, 1)}
 
 
-TOOLS = (status, start, stop, jobs, job, transcribe, translate, rebuild, export, text, flags, tests, script)
+# --- pokretanja u pozadini (krug 29) -----------------------------------------
+#
+# Veza do ovog procesa ističe posle ~60 s, a testovi traju minutima. Zato
+# `tests` i `script` samo pokrenu pokretač (`python -m subtitis.mcp_server run
+# <oznaka>`) i odmah vrate oznaku; `zadatak(oznaka)` kaže da li još radi i
+# koliko traje, ili vraća rezultat. Sve je u `tmp/runs/<oznaka>/`:
+# `meta.json` (vrsta, argumenti, PID i vreme pokretanja pokretača) i, na kraju,
+# `result.json`. `tmp/` se prazni pri pokretanju servera — pokretanje koje
+# radi ostaje (`config.empty_tmp`).
+
+_RUN_ID_RE = re.compile(r"^(tests|script)-\d{8}-\d{6}-[0-9a-f]{6}$")
+WORKERS = {"tests": _tests_work, "script": _script_work}
+
+
+def runs_dir() -> Path:
+    return cfg.TMP_DIR / cfg.RUNS_DIR_NAME
+
+
+def _launch(kind: str, args: list[str]) -> dict[str, Any]:
+    from .proc import start_time
+
+    run_id = f"{kind}-{time.strftime('%Y%m%d-%H%M%S')}-{os.urandom(3).hex()}"
+    d = runs_dir() / run_id
+    d.mkdir(parents=True)
+    meta = {"kind": kind, "args": args, "started_at": time.time()}
+    cfg.write_json(d / "meta.json", meta)
+    proc = subprocess.Popen(
+        [_python(), "-m", "subtitis.mcp_server", "run", run_id], cwd=ROOT,
+        env=_child_env() | {"PYTHONIOENCODING": "utf-8", "SUBTITIS_TMP_DIR": str(cfg.TMP_DIR)},
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    meta.update(pid=proc.pid, pid_started=start_time(proc.pid))
+    cfg.write_json(d / "meta.json", meta)
+    return {"oznaka": run_id, "radi": True,
+            "poruka": f"Pokrenuto u pozadini — prati sa zadatak({run_id!r})."}
+
+
+def run_main(run_id: str) -> int:
+    """Pokretač: uradi posao i upiši `result.json` (i kad padne)."""
+    d = runs_dir() / run_id
+    meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
+    try:
+        result = WORKERS[meta["kind"]](meta["args"], d)
+    except Exception as exc:  # noqa: BLE001 — rezultat mora da postoji
+        result = {"greska": str(exc) if isinstance(exc, ToolError) else f"{type(exc).__name__}: {exc}"}
+    tmp = d / "result.json.part"
+    tmp.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(d / "result.json")  # atomično: `zadatak` nikad ne vidi pola fajla
+    return 0
+
+
+@_safe
+def tests(obrazac: str | None = None) -> dict[str, Any]:
+    """pytest uz pokrivenost, U POZADINI: vraća odmah oznaku; rezultat (prošlo,
+    palo, pokrivenost, poruke samo za palo) daje zadatak(oznaka).
+    `obrazac` je putanja unutar tests/ (`tests/test_srt.py`) ili `-k` izraz."""
+    return _launch("tests", _tests_args(obrazac))
+
+
+@_safe
+def script(ime: str, argumenti: list[str] | None = None) -> dict[str, Any]:
+    """Merna skripta iz `scripts/` (zatvoren spisak), U POZADINI: vraća odmah
+    oznaku; izlaz daje zadatak(oznaka)."""
+    return _launch("script", _script_args(ime, argumenti))
+
+
+@_safe
+def zadatak(oznaka: str) -> dict[str, Any]:
+    """Tok pokretanja iz tests()/script(): dok radi — koliko traje; kad završi —
+    rezultat."""
+    from .proc import same_process
+
+    if not _RUN_ID_RE.match(oznaka or ""):
+        raise ToolError(f"Nepoznata oznaka {oznaka!r}.")
+    d = runs_dir() / oznaka
+    try:
+        meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raise ToolError(f"Nema pokretanja {oznaka!r} (tmp/ se prazni pri pokretanju servera).") from None
+    took = round(time.time() - meta["started_at"], 1)
+    res = d / "result.json"
+    if res.exists():
+        return {"gotovo": True, "oznaka": oznaka, "vrsta": meta["kind"],
+                **json.loads(res.read_text(encoding="utf-8"))}
+    if "pid" in meta and not same_process(meta["pid"], meta.get("pid_started")):
+        raise ToolError(f"Pokretanje {oznaka!r} je prekinuto posle {took} s — proces više ne radi, "
+                        "a rezultata nema.")
+    return {"gotovo": False, "oznaka": oznaka, "vrsta": meta["kind"], "traje_s": took}
+
+
+TOOLS = (status, start, stop, jobs, job, transcribe, translate, rebuild, export, text, flags,
+         tests, script, zadatak)
 
 
 def build_server():
@@ -565,3 +689,9 @@ def uninstall(path: Path | None = None) -> dict[str, Any]:
     del data["mcpServers"][SERVER_KEY]
     bak = _save(path, data)
     return {"promenjeno": True, "fajl": str(path), "rezerva": str(bak) if bak else None}
+
+
+if __name__ == "__main__":  # pokretač pozadinskih pokretanja (`_launch`)
+    if sys.argv[1:2] == ["run"] and len(sys.argv) == 3 and _RUN_ID_RE.match(sys.argv[2]):
+        raise SystemExit(run_main(sys.argv[2]))
+    raise SystemExit("upotreba: python -m subtitis.mcp_server run <oznaka>")

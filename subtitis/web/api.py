@@ -12,6 +12,7 @@ zbog veličine odgovora: dvesta rečenica troši kontekst.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import threading
 from pathlib import Path
@@ -53,6 +54,16 @@ FLAG_KINDS = ("izmisljeno", "neprevedeno", "lici_na_original", "nesigurno",
 SHUTDOWN: Callable[[], None] | None = None
 
 LOCAL = {"127.0.0.1", "::1", "localhost"}
+
+#: Jezik ide u ime fajla (`sentences.{lang}.json`): bez ove provere bi
+#: `lang=../../x` čitao van posla (bezbednosni pregled kruga 28).
+_LANG_RE = re.compile(r"^[a-z]{2,3}(-[A-Za-z]{2,4})?$")
+
+
+def _lang(lang: str | None) -> str | None:
+    if lang is not None and not _LANG_RE.match(lang):
+        raise HTTPException(400, f"Neispravna oznaka jezika: {lang!r}")
+    return lang
 
 
 def _local_only(request: Request) -> None:
@@ -199,7 +210,7 @@ def api_flags(job_id: str, kind: str | None = None) -> Any:
 def api_text(job_id: str, lang: str | None = None, start: int = 1, end: int | None = None) -> Any:
     """Rečenice `start`..`end` (id-jevi, uključivo), najviše `TEXT_MAX`."""
     job = job_or_404(job_id)
-    lang = lang or job["language"]
+    lang = _lang(lang) or job["language"]
     sf = load_sentences(job_id, lang)
     if sf is None:
         raise HTTPException(404, f"Posao {job_id} nema tekst na jeziku {lang!r}; ima: {', '.join(_languages(job_id)) or 'nijedan'}.")
@@ -231,6 +242,7 @@ def api_transcribe(body: TranscribeIn, request: Request) -> Any:
     from .. import asr
 
     _local_only(request)
+    _lang(body.language)
     src = Path(body.path)
     if not src.is_file():
         raise HTTPException(404, f"Nema fajla: {src}")
@@ -248,7 +260,12 @@ def api_transcribe(body: TranscribeIn, request: Request) -> Any:
     up = cfg.job_dir(job_id) / "upload"
     up.mkdir(parents=True, exist_ok=True)
     dst = up / src.name
-    shutil.copy2(src, dst)
+    # Tvrda veza na istom disku je trenutna; kopija od 2 GB na sporom disku bi
+    # prešla granicu veze do Claude-a (~60 s, krug 29). Posao fajl samo čita.
+    try:
+        os.link(src, dst)
+    except OSError:
+        shutil.copy2(src, dst)
     gloss = cfg.make_job_glossary(body.language, use_default=cfg.new_project_glossary() == "default",
                                   recording_terms=body.terms)
     cfg.write_json(cfg.job_glossary_path(job_id), gloss)
@@ -275,6 +292,8 @@ def api_translate(job_id: str, body: TranslateIn) -> Any:
     from ..translit import BISCRIPTAL_LANGUAGES
 
     job = job_or_404(job_id)
+    for lg in body.languages:
+        _lang(lg)
     if not body.languages:
         raise HTTPException(400, "Nije zadat nijedan jezik.")
     if db.pending_task(job_id):
@@ -312,7 +331,7 @@ def api_rebuild(job_id: str, body: RebuildIn) -> Any:
         raise HTTPException(400, "Nepoznat izbor slova, interpunkcije ili pisma.")
     if db.pending_task(job_id) is not None:
         raise HTTPException(409, "Obrada je u toku — prelomi ponovo kad završi.")
-    lang = body.language or job["language"]
+    lang = _lang(body.language) or job["language"]
     try:
         pipeline.run_build(job_id, profile=body.profile or None, script=body.script, language=lang,
                            case=body.case, drop_punct=body.punct == "drop")
@@ -328,7 +347,7 @@ def api_rebuild(job_id: str, body: RebuildIn) -> Any:
 def api_export(job_id: str, lang: str | None = None, script: str | None = None) -> Any:
     """Putanja do gotovog SRT-a — ne sadržaj."""
     job = job_or_404(job_id)
-    lang = lang or job["language"]
+    lang = _lang(lang) or job["language"]
     out = cfg.job_dir(job_id) / "out"
     names = [f["name"] for f in output_files(job_id)]
     want = [n for n in names if n[:-4].rsplit(".", 1)[-1].split("-")[0] == lang

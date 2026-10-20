@@ -124,6 +124,7 @@ def _migrate_profiles() -> None:
 async def lifespan(_: FastAPI):
     db.init_db()
     cfg.empty_tmp()
+    cfg.write_server_pid()
     _migrate_profiles()
     worker = thread = None
     if worker_in_process():
@@ -133,6 +134,7 @@ async def lifespan(_: FastAPI):
     try:
         yield
     finally:
+        cfg.remove_server_pid()
         if worker is not None:
             worker.stop()
             # Kratak `join` samo da worker koji miruje stigne da obriše otkucaj
@@ -142,6 +144,15 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Subtitis", lifespan=lifespan)
+
+# Krug 29: samo zahtevi upućeni ovom računaru. Server sluša na 127.0.0.1, ali
+# bez provere `Host` stranica sa tuđeg domena koji se razreši u 127.0.0.1 (DNS
+# rebinding) bila bi „ista adresa" kao dashboard — i mogla bi da zove API, pa
+# i `POST /api/jobs` koji čita putanju sa diska. `testserver` je TestClient.
+from starlette.middleware.trustedhost import TrustedHostMiddleware  # noqa: E402
+
+app.add_middleware(TrustedHostMiddleware,
+                   allowed_hosts=["127.0.0.1", "localhost", "[::1]", "testserver"])
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=str(HERE / "templates"))
 

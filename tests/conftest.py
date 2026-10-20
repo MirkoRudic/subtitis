@@ -87,3 +87,13 @@ def _bez_pravih_poslova(tmp_path_factory, monkeypatch):
     primer = _primer_glosara()
     if primer is not None:
         (cfg.GLOSSARY_DIR / "default.json").write_bytes(primer)
+
+
+@pytest.fixture(autouse=True)
+def _tmp_dir_po_testu(tmp_path, monkeypatch):
+    """Krug 29: server prazni `tmp/` pri pokretanju i u njega piše `server.pid`.
+    Bez ovoga svaki TestClient prazni PRAVI `tmp/` — i briše izlaz `tests()`
+    koji upravo radi (i pokretanje testova iz MCP-a pokreće ove iste testove)."""
+    from subtitis import config as cfg
+
+    monkeypatch.setattr(cfg, "TMP_DIR", tmp_path / "_tmp")

@@ -87,7 +87,7 @@ def _identity(port: int):
 
 
 @pytest.mark.parametrize("breakaway, put", [(True, "odvojen proces"), (False, "WMI")])
-def test_server_prezivi_zatvaranje_onoga_ko_ga_je_pokrenuo(tmp_path, breakaway, put):
+def test_server_prezivi_zatvaranje_onoga_ko_ga_je_pokrenuo(tmp_path, monkeypatch, breakaway, put):
     from subtitis import config as cfg
 
     port = _free_port()
@@ -126,6 +126,16 @@ def test_server_prezivi_zatvaranje_onoga_ko_ga_je_pokrenuo(tmp_path, breakaway, 
         ident = _identity(port)
         assert ident is not None, "server je umro sa onim ko ga je pokrenuo"
         assert ident["pid"] == pid and os.path.normcase(ident["jobs_dir"]) == os.path.normcase(str(tmp_path / "jobs"))
+
+        if breakaway:
+            # Krug 29: rezerva gašenja nad PRAVIM serverom — `server.pid` mora da
+            # nosi baš vlasnika porta (osnovni interpreter, ne `.venv` pokretač).
+            from subtitis import mcp_server as m
+
+            monkeypatch.setattr(cfg, "TMP_DIR", tmp_path / "tmp")
+            r = m._fallback(port)
+            assert r.get("pid") == pid and "iz server.pid" in r["poruka"], r
+            assert r["ugasen"] is True or _identity(port) is None
     finally:
         if job is not None:
             k32.CloseHandle(wintypes.HANDLE(job))

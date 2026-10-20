@@ -31,19 +31,63 @@ JOBS_DIR = Path(os.environ.get("SUBTITIS_JOBS_DIR", ROOT_DIR / "jobs"))
 TMP_DIR = Path(os.environ.get("SUBTITIS_TMP_DIR", ROOT_DIR / "tmp"))
 
 
+#: Pokretanja `tests`/`script` iz MCP-a (krug 29): `tmp/runs/<oznaka>/`.
+RUNS_DIR_NAME = "runs"
+
+
+def _run_alive(d: Path) -> bool:
+    """Da li pokretanje u `d` još radi (njegov proces živ, isto vreme pokretanja)."""
+    from .proc import same_process
+
+    try:
+        meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return not (d / "result.json").exists() and same_process(meta.get("pid", -1), meta.get("pid_started"))
+
+
 def empty_tmp() -> int:
-    """Isprazni `TMP_DIR` (pravi ga ako ga nema). Vrati koliko je obrisano."""
+    """Isprazni `TMP_DIR` (pravi ga ako ga nema). Vrati koliko je obrisano.
+    Pokretanje testova koje upravo radi (`runs/`) ostaje — inače bi `start()`
+    usred `tests()` obrisao njegov izlaz."""
     import shutil
 
     TMP_DIR.mkdir(parents=True, exist_ok=True)
     n = 0
     for p in TMP_DIR.iterdir():
-        try:
-            shutil.rmtree(p) if p.is_dir() else p.unlink()
-            n += 1
-        except OSError:
-            pass  # fajl koji drži drugi proces ostaje do sledećeg pokretanja
+        targets = [p]
+        if p.is_dir() and p.name == RUNS_DIR_NAME:
+            targets = [r for r in p.iterdir() if not _run_alive(r)]
+        for x in targets:
+            try:
+                shutil.rmtree(x) if x.is_dir() else x.unlink()
+                n += 1
+            except OSError:
+                pass  # fajl koji drži drugi proces ostaje do sledećeg pokretanja
     return n
+
+
+#: PID servera (krug 29): rezerva gašenja u MCP-u gasi vlasnika porta samo ako
+#: je to baš ovaj proces — isti PID i isto vreme pokretanja.
+def server_pid_path() -> Path:
+    return TMP_DIR / "server.pid"
+
+
+def write_server_pid() -> None:
+    from .proc import start_time
+
+    pid = os.getpid()
+    write_json(server_pid_path(), {"pid": pid, "started": start_time(pid), "jobs_dir": str(JOBS_DIR)})
+
+
+def remove_server_pid() -> None:
+    """Pri urednom gašenju — samo svoj fajl, ne fajl druge instance."""
+    p = server_pid_path()
+    try:
+        if json.loads(p.read_text(encoding="utf-8")).get("pid") == os.getpid():
+            p.unlink()
+    except (OSError, ValueError):
+        pass
 
 # --- Podrazumevane vrednosti ----------------------------------------------
 
