@@ -28,3 +28,7 @@ subtitis/web/static/*.mp3
 subtitis/web/static/*.wav
 subtitis/web/static/*.mp4
 subtitis/web/static/*.m4a
+
+# Lokalna podešavanja Claude Code-a (krug 31): privremen PATH za bezbednosnu
+# proveru — razlog i kad se uklanja je u README, kod `skip-worktree`.
+.claude/settings.local.json

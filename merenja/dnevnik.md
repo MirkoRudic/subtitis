@@ -1012,3 +1012,16 @@ Dva izmerena primera iz kruga 30:
   kontrola — isti napad sa isključenom zaštitom — stvarno uspe (obrisao je
   posao). Bez kontrole, „posao i dalje postoji" ne razlikuje zaštitu od napada
   koji se ni ne izvede.
+
+## Obrasci iz kruga 30, imenovani (2026-10-20, krug 31)
+
+- **Zaštita nabrajanjem hvata ono čega se setiš.** Provera imena fajla po
+  `..`, `/` i `\` propušta `C:tajna.txt`, jer je na Windows-u to putanja na
+  disku C. Proverava se ono što SME (ime `.srt` fajla, razrešena putanja u
+  svom folderu), ne ono čega se setimo da ne sme.
+- **Proba koja ne ume da padne ne meri ništa.** Proba zaštite postaje
+  merenje tek uz kontrolu — isti napad sa isključenom zaštitom mora stvarno da
+  uspe. Bez nje bi „posao i dalje postoji" prolazio i da zaštita ne radi ništa.
+- **Test strožiji od dogovora popravlja se kao test.** Kad `start()` pod
+  opterećenjem namerno ne vrati PID (dogovor iz kruga 29), pao je test koji je
+  PID očekivao — kod je radio po dogovoru, pa se menja test, ne kod.

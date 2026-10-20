@@ -350,6 +350,14 @@ materijalu.
 označen sa `git update-index --skip-worktree glossary/default.json` — git ne vidi izmenu i ne može da je
 komituje. Vraća se sa `git update-index --no-skip-worktree glossary/default.json`.
 
+**Privremeno, samo na radnoj mašini (krug 31):** `.claude/settings.local.json` (van gita) stavlja
+`%LOCALAPPDATA%\Python\bin` (Python 3.14) na početak PATH-a, samo za Claude Code u ovom projektu. Zašto: plugin
+`security-guidance` pokreće bezbednosnu proveru prvim `python`-om na PATH-u, a to je 3.11, koji na Windows-u ne
+može da otvori HTTPS — sedam nečitljivih sertifikata MUP-a (od softvera za čitač lične karte) u Windows
+skladištu obore `ssl.create_default_context()`, a `SSL_CERT_FILE` ne pomaže. 3.14 ih preživljava. Subtitis
+ne zavisi od ovoga (`.venv` je 3.11 i zove se po punoj putanji). PATH je snimak — posle instalacije novog
+programa ume da zastari. Uklanja se (obrisati fajl) kad autori plugina poprave grešku (`krugovi/31-prijava.md`).
+
 ### Reči bez zvuka iza sebe
 
 Izmišljene reči umeju da imaju verovatnoću 0,98–0,99, pa ih `low_confidence` ne
