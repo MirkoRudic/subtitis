@@ -991,3 +991,24 @@ identitet servera tražiti preko porta i `/api/identity`, ne preko putanje.
   `ssl.create_default_context()` učitava sve. Zato je pala automatska
   bezbednosna provera. Python 3.14 ih preživljava; `.venv` alati (httpx,
   pip) koriste `certifi` i ne osećaju ovo.
+
+## Obrazac: „lokalno" nije isto što i „bezbedno" (2026-10-20, krug 30)
+
+„Lokalno" nije isto što i „bezbedno" čim postoji ruta koju neko drugi može da
+pozove. Pretpostavka koja je važila kad je kod pisan prestaje da važi tiho, i
+ništa je ne podseti da je prestala. Dashboard je rastao dvadeset osam krugova
+kao lokalni alat; čim je dobio API koji zove neko drugi, jedan commit je
+nosio tri rupe — a pregled ostatka površine našao je još četiri i jednu
+zajedničku (lažni zahtev sa tuđe stranice na svim rutama koje menjaju
+stanje).
+
+Dva izmerena primera iz kruga 30:
+
+- Provera imena fajla po `..`, `/` i `\` liči na potpunu, a nije: na
+  Windows-u je `out / "C:tajna.txt"` putanja `C:tajna.txt` — disk C, van
+  posla. Ime se proverava po onome što sme da bude (ime `.srt` fajla), i
+  razrešena putanja mora ostati u svom folderu.
+- Proba zaštite od lažnog zahteva u pravom pregledaču meri nešto tek kad
+  kontrola — isti napad sa isključenom zaštitom — stvarno uspe (obrisao je
+  posao). Bez kontrole, „posao i dalje postoji" ne razlikuje zaštitu od napada
+  koji se ni ne izvede.

@@ -57,7 +57,7 @@ LOCAL = {"127.0.0.1", "::1", "localhost"}
 
 #: Jezik ide u ime fajla (`sentences.{lang}.json`): bez ove provere bi
 #: `lang=../../x` čitao van posla (bezbednosni pregled kruga 28).
-_LANG_RE = re.compile(r"^[a-z]{2,3}(-[A-Za-z]{2,4})?$")
+_LANG_RE = cfg.LANG_RE
 
 
 def _lang(lang: str | None) -> str | None:
@@ -252,6 +252,7 @@ def api_transcribe(body: TranscribeIn, request: Request) -> Any:
     if vad not in asr.VAD_PRESETS:
         raise HTTPException(400, f"Nepoznat izbor filtera tišine: {vad!r}")
     if body.profile:
+        cfg.check_profile_name(body.profile)  # ime, nikad putanja (krug 30)
         try:
             cfg.load_profile(body.profile)
         except SubtitisError as exc:
@@ -294,6 +295,8 @@ def api_translate(job_id: str, body: TranslateIn) -> Any:
     job = job_or_404(job_id)
     for lg in body.languages:
         _lang(lg)
+    if body.profile:
+        cfg.check_profile_name(body.profile)
     if not body.languages:
         raise HTTPException(400, "Nije zadat nijedan jezik.")
     if db.pending_task(job_id):
@@ -332,6 +335,8 @@ def api_rebuild(job_id: str, body: RebuildIn) -> Any:
     if db.pending_task(job_id) is not None:
         raise HTTPException(409, "Obrada je u toku — prelomi ponovo kad završi.")
     lang = _lang(body.language) or job["language"]
+    if body.profile:
+        cfg.check_profile_name(body.profile)
     try:
         pipeline.run_build(job_id, profile=body.profile or None, script=body.script, language=lang,
                            case=body.case, drop_punct=body.punct == "drop")

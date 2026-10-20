@@ -311,7 +311,9 @@ def _toml_value(value: Any) -> str:
         return "true" if value else "false"
     if isinstance(value, int):
         return str(value)
-    escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
+    # i kontrolni znaci: novi red u vrednosti bi u TOML-u dopisao ključ (krug 30)
+    escaped = (str(value).replace("\\", "\\\\").replace('"', '\\"')
+               .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t"))
     return f'"{escaped}"'
 
 
@@ -578,6 +580,27 @@ def glossary_terms(glossary: dict[str, dict[str, str]], language: str) -> list[s
 # --- Poslovi --------------------------------------------------------------
 
 _JOB_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+#: Oznaka jezika i ime profila iz zahteva idu u ime fajla
+#: (`sentences.{lang}.json`, `profiles/{ime}.json`). Bez provere bi
+#: `lang=../../x` ili profil `C:/bilo/sta.json` čitao van posla (krug 30).
+LANG_RE = re.compile(r"^[a-z]{2,3}(-[A-Za-z]{2,4})?$")
+PROFILE_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,40}$")
+
+
+def check_lang(lang: str | None) -> str:
+    if not isinstance(lang, str) or not LANG_RE.match(lang):
+        raise SubtitisError(f"Neispravna oznaka jezika: {lang!r}")
+    return lang
+
+
+def check_profile_name(name: str | None) -> str:
+    """Samo IME profila. `load_profile` prima i putanju — to je za komandnu
+    liniju (`--profile moj.json`), nikad za zahtev sa strane."""
+    if not isinstance(name, str) or not PROFILE_NAME_RE.match(name):
+        raise SubtitisError(f"Neispravno ime profila: {name!r}")
+    return name
 
 
 def job_dir(job_id: str) -> Path:

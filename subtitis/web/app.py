@@ -153,8 +153,51 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware  # noqa: E402
 
 app.add_middleware(TrustedHostMiddleware,
                    allowed_hosts=["127.0.0.1", "localhost", "[::1]", "testserver"])
+
+#: Metode koje menjaju stanje — samo one se proveravaju na poreklo.
+_UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+def cross_site_reason(method: str, headers: Any) -> str | None:
+    """Zašto zahtev NE dolazi sa samog dashboarda, ili None (krug 30, CSRF).
+
+    Pregledač na svaki POST stavlja `Origin`, a noviji i `Sec-Fetch-Site`.
+    Forma ili `fetch` sa tuđe stranice (i sa druge lokalne aplikacije na
+    drugom portu — to je „same-site", ne „same-origin") se odbija. Zahtev bez
+    oba zaglavlja nije iz pregledača (MCP, curl, testovi): lažni zahtev
+    preko tuđe stranice traži pregledač, pa takav prolazi.
+    """
+    if method not in _UNSAFE_METHODS:
+        return None
+    site = headers.get("sec-fetch-site")
+    if site is not None and site not in ("same-origin", "none"):
+        return f"Sec-Fetch-Site: {site}"
+    origin = headers.get("origin")
+    if origin is None:
+        return None
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(origin)
+    if origin == "null" or parts.scheme not in ("http", "https") or parts.netloc != headers.get("host", ""):
+        return f"Origin: {origin}"
+    return None
+
+
+@app.middleware("http")
+async def same_origin_only(request: Request, call_next: Any) -> Any:
+    reason = cross_site_reason(request.method, request.headers)
+    if reason:
+        return JSONResponse(
+            {"detail": f"Zahtev nije sa ovog dashboarda ({reason}) — odbijen."}, status_code=403)
+    return await call_next(request)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=str(HERE / "templates"))
+
+
+@app.exception_handler(SubtitisError)
+async def subtitis_error(request: Request, exc: SubtitisError) -> Any:
+    """Neispravan ulaz (jezik, profil, posao) je 400 sa porukom, ne pad (krug 30)."""
+    return await http_error(request, HTTPException(400, str(exc).splitlines()[0]))
 
 
 @app.exception_handler(HTTPException)
@@ -188,7 +231,7 @@ def job_or_404(job_id: str):
 
 
 def sentences_path(job_id: str, lang: str) -> Path:
-    return cfg.job_dir(job_id) / f"sentences.{lang}.json"
+    return cfg.job_dir(job_id) / f"sentences.{cfg.check_lang(lang)}.json"
 
 
 def load_sentences(job_id: str, lang: str) -> SentencesFile | None:
@@ -266,7 +309,7 @@ def detection(job_id: str, lang: str | None) -> dict[str, Any] | None:
     """
     if not lang:
         return None
-    path = cfg.job_dir(job_id) / f"words.{lang}.json"
+    path = cfg.job_dir(job_id) / f"words.{cfg.check_lang(lang)}.json"
     if not path.exists():
         return None
     try:
@@ -1040,6 +1083,8 @@ async def create_job(
     """
     if not audio.filename:
         raise HTTPException(400, "Nije izabran fajl.")
+    if language != "auto":
+        cfg.check_lang(language)
     if vad_preset not in asr.VAD_PRESETS:
         raise HTTPException(400, f"Nepoznat izbor filtera tišine: {vad_preset!r}")
 
@@ -1277,6 +1322,10 @@ def save_settings_form(
         raise HTTPException(400, f"Nepoznat jezik: {default_target_language!r}")
     if not llm_model.strip():
         raise HTTPException(400, "Model za prevod ne sme biti prazan.")
+    # ime Ollama modela (`qwen2.5:14b`, `hf.co/korisnik/model:Q4`) ide u
+    # subtitis.toml: novi red bi tamo dopisao ključ (krug 30)
+    if not re.match(r"^[\w.:/@+-]{1,120}$", llm_model.strip()):
+        raise HTTPException(400, f"Neispravno ime modela: {llm_model!r}")
     if source_wav_ttl_days < 0:
         raise HTTPException(400, "Broj dana ne može biti negativan.")
     if new_project_glossary not in ("default", "none"):
@@ -1691,6 +1740,11 @@ def start_translate(
     punct: str = Form("keep"),
 ) -> Any:
     job_or_404(job_id)
+    cfg.check_lang(to)
+    if profile:
+        cfg.check_profile_name(profile)
+    if pivot:
+        cfg.check_lang(pivot)
     if db.pending_task(job_id):
         raise HTTPException(409, "Za ovaj projekat već postoji zadatak u redu.")
     if script not in ("Latn", "Cyrl"):
@@ -1725,6 +1779,9 @@ def start_build(
     punct: str = Form("keep"),
 ) -> Any:
     job_or_404(job_id)
+    cfg.check_lang(language)
+    if profile:
+        cfg.check_profile_name(profile)
     if case not in CASES:
         raise HTTPException(400, f"Nepoznata veličina slova: {case!r}")
     if punct not in ("keep", "drop"):
@@ -1768,6 +1825,9 @@ def rebuild_now(
 
     job = dict(job_or_404(job_id))
     error = None
+    cfg.check_lang(language)
+    if profile:
+        cfg.check_profile_name(profile)
     if case not in CASES or punct not in ("keep", "drop") or script not in ("Latn", "Cyrl"):
         error = "Nepoznat izbor."
     elif db.pending_task(job_id) is not None:
@@ -1912,12 +1972,19 @@ def clip(job_id: str, start: float = 0.0, end: float = 0.0) -> Any:
 # ==========================================================================
 
 
+_DOWNLOAD_RE = re.compile(r"^[^\\/:*?\"<>|\x00-\x1f]+\.srt$")
+
+
 @app.get("/jobs/{job_id}/download/{name}")
 def download(job_id: str, name: str) -> Any:
     job_or_404(job_id)
-    if "/" in name or "\\" in name or ".." in name:
+    out = cfg.job_dir(job_id) / "out"
+    path = out / name
+    # Samo ime gotovog SRT-a u `out/`. Provera `..`, `/` i `\` nije bila dovoljna:
+    # na Windows-u je `out / "C:tajna.txt"` putanja `C:tajna.txt` — fajl na
+    # disku C, van posla (krug 30).
+    if (not _DOWNLOAD_RE.match(name) or path.parent.resolve() != out.resolve()):
         raise HTTPException(400, "Neispravno ime datoteke.")
-    path = cfg.job_dir(job_id) / "out" / name
     if not path.exists():
         raise HTTPException(404, f"Nema {name}")
     return FileResponse(path, filename=name, media_type="application/x-subrip")
@@ -2056,6 +2123,7 @@ def shorten_proposal(job_id: str, lang: str | None) -> dict[str, Any] | None:
 
 @app.post("/jobs/{job_id}/shorten")
 def start_shorten(job_id: str, language: str = Form(...)) -> Any:
+    cfg.check_lang(language)
     """Drugi prolaz kroz model za cue-ove gore od originala. Samo na dugme."""
     job_or_404(job_id)
     if db.pending_task(job_id):

@@ -115,7 +115,15 @@ def test_server_prezivi_zatvaranje_onoga_ko_ga_je_pokrenuo(tmp_path, monkeypatch
         r = json.loads(line)
         assert r.get("pokrenut") is True, r
         assert put in r["nacin"]
-        pid = r["pid"]
+        if not r.get("radi"):
+            # krug 29: posle 20 s `start()` vrati „pokrenut, pitaj status()" —
+            # pod opterećenjem (cela zbirka testova) hladno pokretanje ume da traje
+            deadline = time.monotonic() + 60
+            while _identity(port) is None and time.monotonic() < deadline:
+                time.sleep(0.5)
+        ident = _identity(port)
+        assert ident is not None, "server nije proradio ni za 80 s"
+        pid = r.get("pid") or ident["pid"]
 
         # „Claude se zatvara": Job se zatvara, pomoćni proces umire.
         k32.CloseHandle(wintypes.HANDLE(job))

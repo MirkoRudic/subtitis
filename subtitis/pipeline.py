@@ -1393,7 +1393,7 @@ SHORTEN_FILE = "shorten.{lang}.json"
 
 
 def shorten_path(job_id: str, lang: str) -> Path:
-    return cfg.job_dir(job_id) / SHORTEN_FILE.format(lang=lang)
+    return cfg.job_dir(job_id) / SHORTEN_FILE.format(lang=cfg.check_lang(lang))
 
 
 @dataclass
