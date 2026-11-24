@@ -11,10 +11,10 @@ from typing import Any
 #: podnožju dashboarda, i `/api/identity`.
 #: Prva dva broja prate projektni dokument (v1.5); `1.6.0` tek kad nastane
 #: dokument v1.6. Krug rada nosi `ROUND`, ne treći broj.
-__version__ = "1.6.0"
+__version__ = "1.6.1"
 
 #: Krug rada u kome je napravljen ovaj kod — raste sa svakim krugom.
-ROUND = 32
+ROUND = 33
 
 SCHEMA_VERSION = 1
 

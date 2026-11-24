@@ -1776,15 +1776,17 @@ def test_zivi_red_bez_primera_iz_titla(web):
 
 
 @pytest.mark.parametrize("url", ["/", "/settings", "/kako"])
-def test_potpis_u_podnozju_svake_strane(web, url):
-    """Krug 8: verzija se čita sa jednog mesta; krug 25: uz krug i commit."""
+def test_bez_podnozja_potpis_u_podesavanjima(web, url):
+    """Krug 8: verzija se čita sa jednog mesta; krug 25: uz krug i commit; krug 32: podnožja nema,
+    potpis i „Kako ovo radi" su u Podešavanjima (Verzija, O programu)."""
     from subtitis import ROUND, __version__
 
     client, db, cfg = web
     page = client.get(url).text
-    sign = page.split('<footer class="sign">')[1].split("</footer>")[0]
-    assert f"Mirko + Claude · Subtitis {__version__} · krug {ROUND}" in sign
-    assert 'href="/kako"' in sign
+    assert '<footer class="sign">' not in page
+    if url == "/settings":
+        assert f"Subtitis {__version__} · krug {ROUND}" in page
+        assert 'href="/kako"' in page
 
 
 def test_verzija_je_na_jednom_mestu():
@@ -1989,7 +1991,6 @@ def test_zaglavlje_logo_vodi_nazad_zupcanik_bez_teksta(web):
         assert 'class="gear" title="podešavanja" aria-label="podešavanja"' in nav
         assert '<a class="brand" href="/" title="baza projekata">' in nav
         assert "← baza projekata" not in page
-        assert 'href="/kako"' in page.split('<footer class="sign">')[1]
 
 
 def test_jezici_bez_skracenice(web):
@@ -2017,7 +2018,7 @@ def test_trake_se_zatvaraju_same(web):
     """Klik van, Esc, najviše jedna otvorena — zajedničko za sve strane."""
     client, db, cfg = web
     page = client.get("/").text
-    skript = page.split('<footer class="sign">')[1]
+    skript = page.split("</main>")[1]
     assert 'document.addEventListener("toggle"' in skript and '"Escape"' in skript
 
 

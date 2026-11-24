@@ -588,3 +588,9 @@ form.retry { margin: 0; }
 .btn.danger-line { color: var(--err); border-color: var(--err); }
 .log-lines { font: .8rem/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .log-lines .e { color: var(--err); }
+.back-btn { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; color: var(--muted);
+  border: 1px solid var(--line); text-decoration: none; }
+.back-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
+a.btn, a.linkbtn { text-decoration: none; }
+a.linkbtn:hover { text-decoration: underline; }
+.row-btns.links { gap: 20px; }
