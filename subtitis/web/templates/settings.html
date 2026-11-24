@@ -1,6 +1,92 @@
 {% extends "base.html" %}
 {% from "_help.html" import help, why %}
-{% block title %}Podešavanja — Subtitis{% endblock %}
+{% block title %}Podešavanja — Subtitis
+{# VAJB pravila UI12: na kraju Dnevnik → O programu → Verzija → Deinstaliraj #}
+<section class="panel set-sec">
+  <h3>Dnevnik</h3>
+  <div class="set-row"><span class="muted" id="log-mb">veličina: {{ log_mb }} MB</span>
+    <span class="row-btns"><a class="btn sm ghost" href="/dnevnik">Prikaži dnevnik</a>
+      <button type="button" class="btn sm ghost" id="log-del">Obriši starije od 30 dana</button></span></div>
+</section>
+
+<section class="panel set-sec">
+  <h3>O programu</h3>
+  <p>Subtitis pravi SRT titlove iz snimaka i prevodi ih. Govor prepoznaje faster-whisper, prevodi lokalni jezički model kroz Ollamu;
+    sve radi na ovom računaru, a internet služi samo za proveru nove verzije.</p>
+  <p>Napravio Mirko Rudić sa Claude Opus 5.5 (Anthropic). Licenca: MIT.</p>
+  <button type="button" class="linkbtn" id="more">Više</button>
+  <div class="lic" id="more-body" hidden>
+    {% for a, b, c in [('faster-whisper, CTranslate2', 'prepoznavanje govora', 'MIT'), ('Ollama', 'prevod (lokalni model)', 'MIT'),
+      ('FFmpeg', 'zvuk', 'LGPL / GPL'), ('FastAPI, Uvicorn, Jinja2', 'lokalni server', 'MIT, BSD'), ('htmx', 'interfejs', 'BSD'),
+      ('pystray, Pillow', 'ikonica pored sata', 'LGPL 3.0, MIT-CMU'), ('MCP', 'veza sa Claude-om', 'MIT'), ('Python', 'okruženje', 'PSF')] %}
+    <span>{{ a }}</span><span class="muted">{{ b }}</span><span class="muted">{{ c }}</span>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="panel set-sec">
+  <h3>Verzija</h3>
+  <div class="set-row"><span class="vinfo"><span>{{ signature }}</span><span class="small" id="upd-st"></span></span>
+    <button type="button" class="btn sm ghost" id="upd-go">Proveri</button></div>
+</section>
+
+<section class="panel set-sec">
+  <h3>Deinstaliraj</h3>
+  <div class="set-row"><span>Ukloni prečicu Subtitisa sa ovog računara <span class="muted small">(folder i poslovi ostaju)</span></span>
+    <button type="button" class="btn sm ghost danger-line" id="uninst">Deinstaliraj</button></div>
+</section>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;'}[c]));
+  const post = (u) => fetch(u, {method: 'POST', headers: {'X-Requested-With': 'subtitis'}});
+  $('more').addEventListener('click', () => { const b = $('more-body'); b.hidden = !b.hidden; $('more').textContent = b.hidden ? 'Više' : 'Manje'; });
+  $('log-del').addEventListener('click', async (e) => {
+    const b = e.currentTarget;
+    if (!b.classList.contains('sure')) { b.classList.add('sure'); b.textContent = 'Klikni ponovo za brisanje'; return; }
+    const d = await (await post('/api/dnevnik/obrisi')).json();
+    $('log-mb').textContent = 'veličina: ' + d.mb + ' MB';
+    b.classList.remove('sure'); b.textContent = 'Obriši starije od 30 dana';
+  });
+  $('uninst').addEventListener('click', async (e) => {
+    const b = e.currentTarget;
+    if (!b.classList.contains('sure')) { b.classList.add('sure'); b.textContent = 'Klikni ponovo za uklanjanje'; return; }
+    await post('/api/deinstaliraj').catch(() => {});
+    window.close();
+  });
+  // V3, V5: stanje poslednje provere; nova verzija se instalira sama kad se Subtitis zatvori
+  let st = {{ upd|tojson }};
+  const hhmm = (t) => { const d = new Date(t * 1000), p = (n) => String(n).padStart(2, '0'); return p(d.getHours()) + ':' + p(d.getMinutes()); };
+  const paint = () => {
+    const s = $('upd-st'), b = $('upd-go');
+    if (!st.git) { s.innerHTML = '<span class="muted">kopija bez gita — ažurira se ručno</span>'; b.hidden = true; return; }
+    if (!st.at) s.innerHTML = '<span class="muted">provera…</span>';
+    else if (!st.ok) s.innerHTML = `<span class="muted">provera nije uspela · ${hhmm(st.at)}</span>`;
+    else if (st.behind) s.innerHTML = `<span class="ok">nova verzija ${esc(st.version || '')}</span> <span class="muted">· instalira se sama kad se Subtitis zatvori</span>`;
+    else s.innerHTML = `<span class="ok">najnovija verzija</span> <span class="muted">· provereno ${hhmm(st.at)}</span>`;
+    b.textContent = st.behind ? 'Ažuriraj odmah' : 'Proveri';
+    b.className = 'btn sm ' + (st.behind ? 'primary' : 'ghost');
+  };
+  const check = async () => { $('upd-st').innerHTML = '<span class="muted">provera…</span>'; st = Object.assign(st, await (await fetch('/api/azuriranje')).json()); paint(); };
+  paint();
+  if (st.git && (!st.at || Date.now() / 1000 - st.at > 3600)) check();
+  $('upd-go').addEventListener('click', async (e) => {
+    if (!st.behind) { await check(); if (!st.behind) return; }
+    const b = e.currentTarget; b.disabled = true;
+    $('upd-st').innerHTML = '<span class="muted">ažuriranje…</span>';
+    const before = (await (await fetch('/api/identity')).json()).signature;
+    const d = await (await post('/api/azuriraj')).json().catch(() => ({ok: false}));
+    if (!d.ok) { $('upd-st').innerHTML = '<span class="err">ažuriranje nije uspelo — detalji su u dnevniku</span>'; b.disabled = false; return; }
+    if (d.waiting) $('upd-st').innerHTML = '<span class="muted">preuzeto · Subtitis se restartuje kad obrada završi</span>';
+    for (let i = 0; i < 2400; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      try { const h = await (await fetch('/api/identity', {cache: 'no-store'})).json(); if (h.signature !== before) { location.reload(); return; } } catch (err) { /* restart */ }
+    }
+  });
+})();
+</script>
+{% endblock %}
 
 {% block content %}
 <div class="pjhead">
@@ -166,4 +252,90 @@
     <button type="submit" class="btn sm ghost">Dodaj</button>
   </form>
 </section>
+
+{# VAJB pravila UI12: na kraju Dnevnik → O programu → Verzija → Deinstaliraj #}
+<section class="panel set-sec">
+  <h3>Dnevnik</h3>
+  <div class="set-row"><span class="muted" id="log-mb">veličina: {{ log_mb }} MB</span>
+    <span class="row-btns"><a class="btn sm ghost" href="/dnevnik">Prikaži dnevnik</a>
+      <button type="button" class="btn sm ghost" id="log-del">Obriši starije od 30 dana</button></span></div>
+</section>
+
+<section class="panel set-sec">
+  <h3>O programu</h3>
+  <p>Subtitis pravi SRT titlove iz snimaka i prevodi ih. Govor prepoznaje faster-whisper, prevodi lokalni jezički model kroz Ollamu;
+    sve radi na ovom računaru, a internet služi samo za proveru nove verzije.</p>
+  <p>Napravio Mirko Rudić sa Claude Opus 5.5 (Anthropic). Licenca: MIT.</p>
+  <button type="button" class="linkbtn" id="more">Više</button>
+  <div class="lic" id="more-body" hidden>
+    {% for a, b, c in [('faster-whisper, CTranslate2', 'prepoznavanje govora', 'MIT'), ('Ollama', 'prevod (lokalni model)', 'MIT'),
+      ('FFmpeg', 'zvuk', 'LGPL / GPL'), ('FastAPI, Uvicorn, Jinja2', 'lokalni server', 'MIT, BSD'), ('htmx', 'interfejs', 'BSD'),
+      ('pystray, Pillow', 'ikonica pored sata', 'LGPL 3.0, MIT-CMU'), ('MCP', 'veza sa Claude-om', 'MIT'), ('Python', 'okruženje', 'PSF')] %}
+    <span>{{ a }}</span><span class="muted">{{ b }}</span><span class="muted">{{ c }}</span>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="panel set-sec">
+  <h3>Verzija</h3>
+  <div class="set-row"><span class="vinfo"><span>{{ signature }}</span><span class="small" id="upd-st"></span></span>
+    <button type="button" class="btn sm ghost" id="upd-go">Proveri</button></div>
+</section>
+
+<section class="panel set-sec">
+  <h3>Deinstaliraj</h3>
+  <div class="set-row"><span>Ukloni prečicu Subtitisa sa ovog računara <span class="muted small">(folder i poslovi ostaju)</span></span>
+    <button type="button" class="btn sm ghost danger-line" id="uninst">Deinstaliraj</button></div>
+</section>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;'}[c]));
+  const post = (u) => fetch(u, {method: 'POST', headers: {'X-Requested-With': 'subtitis'}});
+  $('more').addEventListener('click', () => { const b = $('more-body'); b.hidden = !b.hidden; $('more').textContent = b.hidden ? 'Više' : 'Manje'; });
+  $('log-del').addEventListener('click', async (e) => {
+    const b = e.currentTarget;
+    if (!b.classList.contains('sure')) { b.classList.add('sure'); b.textContent = 'Klikni ponovo za brisanje'; return; }
+    const d = await (await post('/api/dnevnik/obrisi')).json();
+    $('log-mb').textContent = 'veličina: ' + d.mb + ' MB';
+    b.classList.remove('sure'); b.textContent = 'Obriši starije od 30 dana';
+  });
+  $('uninst').addEventListener('click', async (e) => {
+    const b = e.currentTarget;
+    if (!b.classList.contains('sure')) { b.classList.add('sure'); b.textContent = 'Klikni ponovo za uklanjanje'; return; }
+    await post('/api/deinstaliraj').catch(() => {});
+    window.close();
+  });
+  // V3, V5: stanje poslednje provere; nova verzija se instalira sama kad se Subtitis zatvori
+  let st = {{ upd|tojson }};
+  const hhmm = (t) => { const d = new Date(t * 1000), p = (n) => String(n).padStart(2, '0'); return p(d.getHours()) + ':' + p(d.getMinutes()); };
+  const paint = () => {
+    const s = $('upd-st'), b = $('upd-go');
+    if (!st.git) { s.innerHTML = '<span class="muted">kopija bez gita — ažurira se ručno</span>'; b.hidden = true; return; }
+    if (!st.at) s.innerHTML = '<span class="muted">provera…</span>';
+    else if (!st.ok) s.innerHTML = `<span class="muted">provera nije uspela · ${hhmm(st.at)}</span>`;
+    else if (st.behind) s.innerHTML = `<span class="ok">nova verzija ${esc(st.version || '')}</span> <span class="muted">· instalira se sama kad se Subtitis zatvori</span>`;
+    else s.innerHTML = `<span class="ok">najnovija verzija</span> <span class="muted">· provereno ${hhmm(st.at)}</span>`;
+    b.textContent = st.behind ? 'Ažuriraj odmah' : 'Proveri';
+    b.className = 'btn sm ' + (st.behind ? 'primary' : 'ghost');
+  };
+  const check = async () => { $('upd-st').innerHTML = '<span class="muted">provera…</span>'; st = Object.assign(st, await (await fetch('/api/azuriranje')).json()); paint(); };
+  paint();
+  if (st.git && (!st.at || Date.now() / 1000 - st.at > 3600)) check();
+  $('upd-go').addEventListener('click', async (e) => {
+    if (!st.behind) { await check(); if (!st.behind) return; }
+    const b = e.currentTarget; b.disabled = true;
+    $('upd-st').innerHTML = '<span class="muted">ažuriranje…</span>';
+    const before = (await (await fetch('/api/identity')).json()).signature;
+    const d = await (await post('/api/azuriraj')).json().catch(() => ({ok: false}));
+    if (!d.ok) { $('upd-st').innerHTML = '<span class="err">ažuriranje nije uspelo — detalji su u dnevniku</span>'; b.disabled = false; return; }
+    if (d.waiting) $('upd-st').innerHTML = '<span class="muted">preuzeto · Subtitis se restartuje kad obrada završi</span>';
+    for (let i = 0; i < 2400; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      try { const h = await (await fetch('/api/identity', {cache: 'no-store'})).json(); if (h.signature !== before) { location.reload(); return; } } catch (err) { /* restart */ }
+    }
+  });
+})();
+</script>
 {% endblock %}

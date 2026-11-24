@@ -21,6 +21,8 @@ import os
 import re
 import shutil
 import subprocess
+import sys
+import threading
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -122,6 +124,13 @@ def _migrate_profiles() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    from .. import applog, appupdate
+
+    applog.setup(cfg.ROOT_DIR / "data" / "logs", "subtitis")
+    applog.auto_trim(500)
+    applog.get("server").info("start %s", version_string())
+    if appupdate.is_git() and sys.platform == "win32":      # V5: tiho ažuriranje kad nema prozora i obrade
+        threading.Thread(target=appupdate.auto_loop, name="azuriranje", daemon=True).start()
     db.init_db()
     cfg.empty_tmp()
     cfg.write_server_pid()
@@ -1056,7 +1065,10 @@ def jobs_list(request: Request) -> Any:
 
 @app.get("/worker/status", response_class=HTMLResponse)
 def worker_status(request: Request) -> Any:
-    """Indikator u zaglavlju. HTMX ga vuče na 3s."""
+    """Indikator u zaglavlju. HTMX ga vuče na 3s — i to je znak da je prozor otvoren (V5)."""
+    from .. import appupdate
+
+    appupdate.STATE["seen"] = time.time()
     return templates.TemplateResponse(
         request,
         "_worker.html",
@@ -1290,6 +1302,8 @@ def settings_page(request: Request, saved: str | None = None) -> Any:
             "config_file": str(cfg.CONFIG_FILE),
             "glossary_file": str(cfg.glossary_path()),
             "saved": saved,
+            "log_mb": _log_mb(),
+            "upd": _upd_state(),
             # Promenljiva okruženja pobeđuje fajl — ako je postavljena, ekran to
             # mora da kaže, inače korisnik menja vrednost koja se ne primenjuje.
             "env_overrides": {
@@ -1303,6 +1317,86 @@ def settings_page(request: Request, saved: str | None = None) -> Any:
             },
         },
     )
+
+
+def _log_mb() -> str:
+    from .. import applog
+
+    return f"{applog.size_mb():.1f}".replace(".", ",")
+
+
+def _upd_state() -> dict[str, Any]:
+    from .. import appupdate
+
+    st = appupdate.STATE
+    return {"git": appupdate.is_git(), "at": st["at"], "ok": st["ok"], "behind": st["behind"], "version": st["version"]}
+
+
+@app.get("/api/azuriranje")
+def azuriranje() -> Any:
+    """Podešavanja → Verzija → Proveri (V3)."""
+    from .. import appupdate
+
+    appupdate.check()
+    return _upd_state()
+
+
+@app.post("/api/azuriraj")
+def azuriraj() -> Any:
+    """„Ažuriraj odmah“: preuzmi; restart odmah ili kad obrada završi (posao se ne prekida)."""
+    from .. import appupdate
+
+    r = appupdate.pull()
+    if not r.get("ok"):
+        return {"ok": False}
+    if r.get("changed"):
+        def later() -> None:
+            t0 = time.time()
+            while appupdate.busy() and time.time() - t0 < 3600:
+                time.sleep(3)
+            appupdate.restart()
+
+        waiting = appupdate.busy()
+        threading.Thread(target=later, name="restart-posle-azuriranja", daemon=True).start()
+        return {"ok": True, "changed": True, "waiting": waiting}
+    return {"ok": True, "changed": False}
+
+
+@app.get("/dnevnik", response_class=HTMLResponse)
+def dnevnik_page(request: Request, samo: str = "", q: str = "") -> Any:
+    from .. import applog
+
+    lines = applog.read(days=3, problems_only=bool(samo), query=q or None, limit=600)
+    return templates.TemplateResponse(request, "dnevnik.html", {"lines": lines, "samo": samo, "q": q})
+
+
+@app.post("/api/dnevnik/obrisi")
+def dnevnik_obrisi() -> Any:
+    from .. import applog
+
+    applog.delete_older_than(30)
+    return {"ok": True, "mb": _log_mb()}
+
+
+@app.post("/api/deinstaliraj")
+def deinstaliraj() -> Any:
+    """P9: uklanja prečicu sa Desktopa (pravi je `subtitis shortcut`), pa gasi Subtitis. Folder i poslovi ostaju."""
+    from .. import applog
+    from ..shortcut import desktop_dir
+    from . import api
+
+    removed = []
+    try:
+        link = desktop_dir() / "Subtitis.lnk"
+        if link.exists():
+            link.unlink()
+            removed.append(str(link))
+    except Exception as exc:
+        applog.get("server").warning("deinstalacija: %s", exc)
+    applog.get("server").info("deinstalacija: %s", ", ".join(removed) or "nema prečice")
+    if api.SHUTDOWN:
+        threading.Timer(0.5, api.SHUTDOWN).start()
+    return {"ok": True}
 
 
 @app.post("/settings")

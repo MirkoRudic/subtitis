@@ -574,3 +574,17 @@ form.retry { margin: 0; }
    x-visinu na sredini slova) i lomio se pri svakoj promeni veličine fonta. */
 .field-label { display: inline-flex; align-items: center; gap: 6px; }
 .field-label > .why-ic { margin-left: 0; vertical-align: baseline; flex: none; }
+
+/* Podešavanja po VAJB pravilima (UI12, UI15): naziv levo, kontrola desno, ništa se ne dodiruje */
+.set-sec { display: flex; flex-direction: column; gap: 12px; }
+.set-sec p { margin: 0; line-height: 1.55; }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 36px; }
+.row-btns { display: flex; gap: 8px; }
+.vinfo { display: flex; flex-direction: column; gap: 3px; }
+.linkbtn { align-self: flex-start; background: none; border: 0; padding: 0; color: var(--accent); font: inherit; cursor: pointer; }
+.linkbtn:hover { text-decoration: underline; }
+.lic { display: grid; grid-template-columns: max-content 1fr max-content; gap: 6px 18px; font-size: .88rem; }
+.lic[hidden] { display: none; }
+.btn.danger-line { color: var(--err); border-color: var(--err); }
+.log-lines { font: .8rem/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.log-lines .e { color: var(--err); }

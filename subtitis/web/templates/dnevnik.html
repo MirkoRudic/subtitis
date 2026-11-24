@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Dnevnik — Subtitis{% endblock %}
+
+{% block content %}
+<div class="pjhead">
+  <h1>Dnevnik</h1>
+</div>
+<section class="panel set-sec">
+  <form method="get" action="/dnevnik" class="set-row">
+    <input type="text" name="q" value="{{ q }}" placeholder="traži" style="flex:1">
+    <span class="row-btns">
+      <a class="btn sm {{ 'primary' if not samo else 'ghost' }}" href="/dnevnik{{ '?q=' ~ q if q }}">sve</a>
+      <a class="btn sm {{ 'primary' if samo else 'ghost' }}" href="/dnevnik?samo=1{{ '&q=' ~ q if q }}">samo problemi</a>
+    </span>
+  </form>
+  <div class="log-lines">{% for l in lines %}<div class="{{ 'e' if (' ERROR ' in l or ' WARNING ' in l or ' CRITICAL ' in l or l.startswith(' ') or l.startswith('Traceback')) }}">{{ l }}</div>{% else %}<p class="muted">Prazno.</p>{% endfor %}</div>
+</section>
+{% endblock %}

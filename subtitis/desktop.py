@@ -23,9 +23,12 @@ u traci — tada se gasi zatvaranjem prozora ili preko Task Managera.
 from __future__ import annotations
 
 import json
+import os
 import re
 import socket
+import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 import webbrowser
@@ -34,6 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from . import config as cfg
+from .config import ROOT_DIR
 
 HERE = Path(__file__).resolve().parent
 ICON_PATH = HERE / "web" / "static" / "subtitis.ico"
@@ -147,6 +151,57 @@ def wait_until_listening(host: str, port: int, timeout: float) -> bool:
     return False
 
 
+EDGE_PROFILE = ROOT_DIR / "data" / "edge"
+
+
+def edge_exe() -> str | None:
+    import shutil
+
+    for exe in (shutil.which("msedge"), r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"):
+        if exe and Path(exe).exists():
+            return exe
+    return None
+
+
+def edge_prefs(profile: Path) -> None:
+    """Podešavanja Edge profila Subtitisa (VAJB P3), dok Edge sa tim profilom ne radi (prepiše fajl pri gašenju):
+    bez mini menija nad označenim tekstom (`edge_quick_search.show_mini_menu`, izmereno 24.11.2026)."""
+    if (profile / "lockfile").exists():
+        return
+    f = profile / "Default" / "Preferences"
+    try:
+        d = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+        q = d.setdefault("edge_quick_search", {})
+        if q.get("show_mini_menu") is False:
+            return
+        q["show_mini_menu"] = False
+        f.parent.mkdir(parents=True, exist_ok=True)
+        tmp = f.with_suffix(".tmp")
+        tmp.write_text(json.dumps(d), encoding="utf-8")
+        os.replace(tmp, f)
+    except (OSError, ValueError):
+        pass
+
+
+def open_window(url: str) -> None:
+    """Prozor bez adresne trake (Edge `--app`, svoj profil u `data/edge`), VAJB P3; bez Edge-a običan pregledač."""
+    import subprocess
+
+    exe = edge_exe() if sys.platform == "win32" else None
+    if not exe:
+        webbrowser.open(url)
+        return
+    edge_prefs(EDGE_PROFILE)
+    subprocess.Popen([exe, f"--app={url}", f"--user-data-dir={EDGE_PROFILE}", "--no-first-run",
+                      "--no-default-browser-check", "--disable-sync", "--start-maximized",
+                      # bez Edge pomoćnika za pisanje nad poljima (imena nisu dokumentovana)
+                      "--disable-features=Compose,ComposeInline,msEdgeCompose,msEdgeComposeInline,msComposeInline,"
+                      "msEdgeWritingAssistance,msWritingAssistance,msEdgeCopilotCompose,msCopilotCompose,"
+                      "msEdgeRewrite,msEdgeInlineRewrite,EdgeCompose,msEdgeHelpMeWrite"],
+                     creationflags=0x08000000)
+
+
 def _tray_image() -> Any:
     from PIL import Image
 
@@ -162,20 +217,26 @@ def run(
     say: Any = print,
 ) -> int:
     """Pokreni (ili samo otvori) Subtitis. Vrati izlazni kod."""
+    from . import appupdate
+
+    old = os.environ.pop(appupdate.WAIT_PORT_ENV, "")
+    if old.isdigit():                      # posle ažuriranja: stari server pušta port, pa preuzimamo isti
+        t0 = time.time()
+        while port_in_use(host, int(old)) and time.time() - t0 < 60:
+            time.sleep(0.5)
     choice = choose_port(host, port if port is not None else cfg.port())
     port = choice.port
+    appupdate.STATE["port"] = port
     say(choice.line(host))
     if choice.running:
         url = url_for(host, port)
         if open_browser:
-            webbrowser.open(url)
+            open_window(url)
         return 0
 
     import uvicorn
 
     from .web.app import WORKER_ENV
-
-    import os
 
     os.environ[WORKER_ENV] = "1" if worker else "0"
 
@@ -203,7 +264,7 @@ def run(
     url = url_for(host, port)
     say(f"Subtitis radi: {url}")
     if open_browser:
-        webbrowser.open(url)
+        open_window(url)
 
     try:
         import pystray
@@ -216,7 +277,7 @@ def run(
         return 0
 
     def on_open(icon: Any, item: Any) -> None:
-        webbrowser.open(url)
+        open_window(url)
 
     def on_quit(icon: Any, item: Any) -> None:
         server.should_exit = True

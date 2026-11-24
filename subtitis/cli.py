@@ -466,7 +466,8 @@ def serve(
     import uvicorn
     import webbrowser
 
-    from .desktop import choose_port, url_for
+    from . import appupdate
+    from .desktop import choose_port, open_window, url_for
     from .web.app import WORKER_ENV
 
     try:
@@ -474,12 +475,13 @@ def serve(
     except SubtitisError as exc:
         _fail(str(exc))
     port = choice.port
+    appupdate.STATE["port"] = port
     url = url_for(host, port)
     if choice.running:
         # Druga instanca bi značila dva workera nad istom bazom.
         typer.secho(choice.line(host) + " — ne dižem drugu.", fg=typer.colors.YELLOW)
         if open_browser:
-            webbrowser.open(url)
+            open_window(url)
         return
     if choice.foreign:
         typer.secho(choice.line(host), fg=typer.colors.YELLOW, bold=True)
@@ -496,7 +498,7 @@ def serve(
     )
     if open_browser:
         # Odloženo: pregledač sme da pozove server tek kad server sluša.
-        threading.Timer(1.5, lambda: webbrowser.open(url)).start()
+        threading.Timer(1.5, lambda: open_window(url)).start()
     server = uvicorn.Server(uvicorn.Config("subtitis.web.app:app", host=host, port=port, log_level="info"))
     from .web import api
 
