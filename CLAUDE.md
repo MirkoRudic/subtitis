@@ -1,4 +1,4 @@
-Važe zajednička pravila Mirkovih aplikacija (`D:\VAJB\vajb-osnova\PRAVILA.md`), uz izuzetke ispod. Šta Subtitis radi iz ugla korisnika je u `SPEC.md`; tehnika, merenja i odluke u `README.md`, `document/` i `merenja/dnevnik.md`.
+Važe zajednička pravila Mirkovih aplikacija (`D:\VAJB\vajb-osnova\PRAVILA.md`), uz izuzetke ispod. Šta Subtitis radi iz ugla korisnika je u `SPEC.md`; tehnika, merenja i odluke u `README.md`, `document/` i `merenja/dnevnik.md`. Dokle smo stigli: `STANJE.md`.
 
 # Subtitis
 
