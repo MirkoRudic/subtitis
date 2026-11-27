@@ -1,6 +1,6 @@
 """VAJB applog 1.0 - daily log files, readable text, never crashes the app.
 
-Rules: PRAVILA.md L1-L6.
+Rules: RULES.md L1-L6.
     from applog import setup, get
     setup(APP_DIR / "data" / "logs", "myapp")   # once, at startup
     log = get("area")                            # anywhere
